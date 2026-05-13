@@ -1,0 +1,217 @@
+// Microsoft Fluent Design Theme for Velotype
+// Inspired by Windows 11's Fluent Design System with acrylic materials, rounded corners, and smooth animations
+{
+  "name": "Fluent Design",
+  "creator": "Tao",
+  "description": "A modern theme inspired by Microsoft's Fluent Design System with acrylic materials and Windows 11 aesthetics",
+  "version": "1.0.0",
+  "homepage": "https://www.microsoft.com/design/fluent",
+  "license": "MIT",
+  "theme": {
+    "colors": {
+      // Windows 11-inspired background with subtle acrylic effect
+      "editor_background": "#f3f3f3",
+
+      // Fluent Design text colors
+      "text_default": "#1a1a1a",
+      "text_link": "#0078d4",  // Microsoft Blue
+      "text_placeholder": "#616161",
+
+      // Acrylic-inspired backgrounds
+      "source_mode_block_bg": "#ffffffcc",
+      "comment_bg": "#fafafa",
+
+      // Fluent heading colors with Microsoft accent
+      "text_h1": "#1a1a1a",
+      "text_h2": "#1a1a1a",
+      "text_h3": "#1a1a1a",
+      "text_h4": "#1a1a1a",
+      "text_h5": "#1a1a1a",
+      "text_h6": "#1a1a1a",
+
+      // Fluent accent borders
+      "border_h1": "#0078d4",  // Microsoft Blue
+      "border_h2": "#0078d4",
+
+      // Quote styling with Fluent materials
+      "text_quote": "#616161",
+      "border_quote": "#e1dfdd",
+
+      // Fluent callout system with acrylic backgrounds
+      "callout_note_bg": "#f2f8ff",
+      "callout_note_border": "#0078d4",
+      "callout_tip_bg": "#f2fff4",
+      "callout_tip_border": "#107c10",
+      "callout_important_bg": "#fff8f2",
+      "callout_important_border": "#ff8c00",
+      "callout_warning_bg": "#fffbf0",
+      "callout_warning_border": "#f7630c",
+      "callout_caution_bg": "#fff4f4",
+      "callout_caution_border": "#d13438",
+
+      // Fluent footnotes
+      "footnote_bg": "#faf9f8",
+      "footnote_border": "#e1dfdd",
+      "footnote_badge_bg": "#0078d4",
+      "footnote_badge_text": "#ffffff",
+      "footnote_backref": "#0078d4",
+
+      // Fluent task lists
+      "task_checkbox_border": "#8a8886",
+      "task_checkbox_bg": "#ffffff",
+      "task_checkbox_checked_bg": "#0078d4",
+      "task_checkbox_check": "#ffffff",
+
+      // Fluent separators
+      "separator_color": "#e1dfdd",
+
+      // Code blocks with Fluent acrylic
+      "code_bg": "#faf9f8",
+      "code_text": "#1a1a1a",
+      "code_language_input_bg": "#ffffff",
+      "code_language_input_border": "#e1dfdd",
+      "code_language_input_text": "#1a1a1a",
+      "code_language_input_placeholder": "#616161",
+
+      // Fluent syntax highlighting
+      "code_syntax_comment": "#616161",
+      "code_syntax_keyword": "#0078d4",
+      "code_syntax_string": "#107c10",
+      "code_syntax_number": "#8a8886",
+      "code_syntax_type": "#005a9e",
+      "code_syntax_function": "#0078d4",
+      "code_syntax_constant": "#8a8886",
+      "code_syntax_variable": "#1a1a1a",
+      "code_syntax_property": "#1a1a1a",
+      "code_syntax_operator": "#1a1a1a",
+      "code_syntax_punctuation": "#1a1a1a",
+
+      // Fluent tables
+      "table_border": "#e1dfdd",
+      "table_header_bg": "#faf9f8",
+      "table_cell_bg": "#ffffff",
+      "table_cell_active_outline": "#0078d4",
+      "table_axis_preview_bg": "#f2f8ff80",
+      "table_axis_selected_bg": "#0078d420",
+      "table_append_button_bg": "#faf9f8",
+      "table_append_button_hover": "#e1dfdd",
+      "table_append_button_text": "#1a1a1a",
+
+      // Fluent images
+      "image_placeholder_bg": "#faf9f8",
+      "image_placeholder_border": "#e1dfdd",
+      "image_placeholder_text": "#616161",
+      "image_caption_text": "#616161",
+
+      // Fluent UI elements
+      "scrollbar_thumb": "#c7c6c5",
+      "cursor": "#0078d4",
+      "selection": "#cce5ff",
+
+      // Fluent dialogs with acrylic materials
+      "dialog_backdrop": "#00000030",
+      "dialog_surface": "#ffffff",
+      "dialog_border": "#e1dfdd",
+      "dialog_title": "#1a1a1a",
+      "dialog_body": "#1a1a1a",
+      "dialog_muted": "#616161",
+      "dialog_primary_button_bg": "#0078d4",
+      "dialog_primary_button_hover": "#106ebe",
+      "dialog_primary_button_text": "#ffffff",
+      "dialog_secondary_button_bg": "#ffffff",
+      "dialog_secondary_button_hover": "#faf9f8",
+      "dialog_secondary_button_text": "#1a1a1a",
+      "dialog_danger_button_bg": "#d13438",
+      "dialog_danger_button_hover": "#a4262c",
+      "dialog_danger_button_text": "#ffffff"
+    },
+
+    "dimensions": {
+      // Fluent Design spacing system
+      "editor_padding": 48,
+      "block_gap": 8,
+      "block_min_height": 20,
+      "block_padding_y": 6,
+      "block_padding_x": 12,
+      "nested_block_indent": 20,
+
+      // Fluent heading spacing
+      "h1_padding_bottom": 6,
+      "h1_margin_bottom": 16,
+      "h1_border_width": 2,
+
+      // Fluent quote design
+      "quote_border_width": 3,
+      "quote_padding_left": 12,
+
+      // Fluent callout design with rounded corners
+      "callout_padding_x": 12,
+      "callout_padding_y": 8,
+      "callout_radius": 8,
+      "callout_border_width": 1,
+
+      // Fluent code blocks
+      "code_block_padding_y": 8,
+      "code_block_padding_x": 12,
+      "code_bg_pad_x": 4,
+      "code_bg_pad_y": 2,
+      "code_bg_radius": 4,
+
+      // Fluent table design
+      "table_cell_padding_x": 8,
+      "table_cell_padding_y": 6,
+      "table_cell_min_height": 28,
+
+      // Fluent dialog design
+      "dialog_width": 360,
+      "dialog_padding": 16,
+      "dialog_radius": 12,
+      "dialog_border_width": 1,
+      "dialog_button_height": 32,
+      "dialog_button_gap": 8,
+      "dialog_button_padding_x": 16,
+
+      // Fluent menu design
+      "menu_text_size": 14,
+      "menu_panel_radius": 8,
+      "menu_item_height": 32,
+      "menu_item_radius": 4,
+
+      // Fluent view mode toggle
+      "view_mode_toggle_radius": 12,
+      "view_mode_toggle_border_width": 1,
+      "view_mode_toggle_text_size": 12
+    },
+
+    "typography": {
+      // Fluent Design typography scale
+      "text_size": 14,
+      "text_line_height": 1.5,
+
+      "h1_size": 24,
+      "h1_weight": "semibold",
+      "h2_size": 20,
+      "h2_weight": "semibold",
+      "h3_size": 16,
+      "h3_weight": "semibold",
+      "h4_size": 14,
+      "h4_weight": "semibold",
+      "h5_size": 12,
+      "h5_weight": "semibold",
+      "h6_size": 11,
+      "h6_weight": "semibold",
+
+      "code_size": 13,
+      "dialog_title_size": 16,
+      "dialog_title_weight": "semibold",
+      "dialog_body_size": 14,
+      "dialog_body_weight": "normal",
+      "dialog_button_size": 14,
+      "dialog_button_weight": "medium"
+    },
+
+    "placeholders": {
+      "empty_editing": "Start typing..."
+    }
+  }
+}

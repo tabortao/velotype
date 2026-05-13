@@ -1,0 +1,206 @@
+// SSPai Misty Theme for Velotype
+// Inspired by Typora's clean design, sspai.com's minimalist aesthetic, and Misty's elegant typography
+// A content-focused theme that emphasizes readability and writing flow
+{
+  "name": "SSPai Misty",
+  "creator": "Tao",
+  "description": "A clean, minimalist theme inspired by Typora, sspai.com, and Misty - optimized for distraction-free writing",
+  "version": "1.0.0",
+  "homepage": "https://sspai.com",
+  "license": "MIT",
+  "theme": {
+    "colors": {
+      // Clean, paper-like background inspired by Typora and sspai
+      "editor_background": "#fdfdfc",
+
+      // Elegant text colors with high readability
+      "text_default": "#2c3e50",
+      "text_link": "#3498db",
+      "text_placeholder": "#bdc3c7",
+
+      // Source mode with subtle contrast
+      "source_mode_block_bg": "#f8f9fa",
+
+      // Comment styling
+      "comment_bg": "#f1f2f6",
+
+      // Typography-focused heading colors (inspired by sspai's editorial style)
+      "text_h1": "#2c3e50",  // Deep blue-gray for strong hierarchy
+      "text_h2": "#34495e",  // Slightly lighter for sub-headings
+      "text_h3": "#5d6d7e",  // Medium gray for tertiary headings
+      "text_h4": "#7f8c8d",  // Light gray for quaternary headings
+      "text_h5": "#95a5a6",  // Lighter gray for lower headings
+      "text_h6": "#bdc3c7",  // Lightest gray for the smallest headings
+
+      // Subtle heading borders
+      "border_h1": "#3498db",  // Blue accent for H1
+      "border_h2": "#ecf0f1",  // Very light border for H2
+
+      // Quotes with elegant styling
+      "text_quote": "#7f8c8d",
+      "border_quote": "#ecf0f1",
+
+      // Callouts with sspai-inspired colors
+      "callout_note_bg": "#ebf3fd",
+      "callout_note_border": "#3498db",
+      "callout_tip_bg": "#e8f5e8",
+      "callout_tip_border": "#27ae60",
+      "callout_important_bg": "#fef9e7",
+      "callout_important_border": "#f39c12",
+      "callout_warning_bg": "#fdeaa7",
+      "callout_warning_border": "#e67e22",
+      "callout_caution_bg": "#fadbd8",
+      "callout_caution_border": "#e74c3c",
+
+      // Footnotes with subtle styling
+      "footnote_bg": "#f8f9fa",
+      "footnote_border": "#ecf0f1",
+      "footnote_badge_bg": "#3498db",
+      "footnote_badge_text": "#ffffff",
+      "footnote_backref": "#3498db",
+
+      // Task lists with clean checkboxes
+      "task_checkbox_border": "#bdc3c7",
+      "task_checkbox_bg": "#ffffff",
+      "task_checkbox_checked_bg": "#27ae60",
+      "task_checkbox_check": "#ffffff",
+
+      // Minimal separator
+      "separator_color": "#ecf0f1",
+
+      // Code blocks with Typora-inspired styling
+      "code_bg": "#f8f9fa",
+      "code_text": "#2c3e50",
+      "code_language_input_bg": "#ffffff",
+      "code_language_input_border": "#ecf0f1",
+      "code_language_input_text": "#2c3e50",
+      "code_language_input_placeholder": "#bdc3c7",
+
+      // Syntax highlighting with elegant colors
+      "code_syntax_comment": "#95a5a6",
+      "code_syntax_keyword": "#8e44ad",
+      "code_syntax_string": "#27ae60",
+      "code_syntax_number": "#e67e22",
+      "code_syntax_type": "#2980b9",
+      "code_syntax_function": "#3498db",
+      "code_syntax_constant": "#d35400",
+      "code_syntax_variable": "#c0392b",
+      "code_syntax_property": "#2c3e50",
+      "code_syntax_operator": "#2c3e50",
+      "code_syntax_punctuation": "#2c3e50",
+
+      // Tables with clean borders
+      "table_border": "#ecf0f1",
+      "table_header_bg": "#f8f9fa",
+      "table_cell_bg": "#ffffff",
+      "table_cell_active_outline": "#3498db",
+      "table_axis_preview_bg": "#ebf3fd80",
+      "table_axis_selected_bg": "#3498db20",
+      "table_append_button_bg": "#f8f9fa",
+      "table_append_button_hover": "#ecf0f1",
+      "table_append_button_text": "#2c3e50",
+
+      // Images with elegant placeholders
+      "image_placeholder_bg": "#f8f9fa",
+      "image_placeholder_border": "#ecf0f1",
+      "image_placeholder_text": "#95a5a6",
+      "image_caption_text": "#7f8c8d",
+
+      // UI elements with refined colors
+      "scrollbar_thumb": "#bdc3c7",
+      "cursor": "#3498db",
+      "selection": "#ebf3fd",
+
+      // Dialogs with clean styling
+      "dialog_backdrop": "#00000020",
+      "dialog_surface": "#ffffff",
+      "dialog_border": "#ecf0f1",
+      "dialog_title": "#2c3e50",
+      "dialog_body": "#2c3e50",
+      "dialog_muted": "#95a5a6",
+      "dialog_primary_button_bg": "#3498db",
+      "dialog_primary_button_hover": "#2980b9",
+      "dialog_primary_button_text": "#ffffff",
+      "dialog_secondary_button_bg": "#f8f9fa",
+      "dialog_secondary_button_hover": "#ecf0f1",
+      "dialog_secondary_button_text": "#2c3e50",
+      "dialog_danger_button_bg": "#e74c3c",
+      "dialog_danger_button_hover": "#c0392b",
+      "dialog_danger_button_text": "#ffffff"
+    },
+
+    "dimensions": {
+      // Enhanced spacing for better readability
+      "editor_padding": 60,
+      "block_gap": 12,
+      "block_min_height": 24,
+      "block_padding_y": 8,
+      "block_padding_x": 16,
+      "nested_block_indent": 24,
+
+      // Typography-focused dimensions
+      "h1_padding_bottom": 8,
+      "h1_margin_bottom": 24,
+      "h1_border_width": 2,
+
+      // Clean quote styling
+      "quote_border_width": 3,
+      "quote_padding_left": 16,
+
+      // Elegant callout design
+      "callout_padding_x": 16,
+      "callout_padding_y": 12,
+      "callout_radius": 6,
+      "callout_border_width": 1,
+
+      // Code block refinements
+      "code_block_padding_y": 12,
+      "code_block_padding_x": 16,
+      "code_bg_pad_x": 6,
+      "code_bg_pad_y": 3,
+      "code_bg_radius": 3,
+
+      // Table elegance
+      "table_cell_padding_x": 12,
+      "table_cell_padding_y": 8,
+      "table_cell_min_height": 32,
+
+      // Dialog polish
+      "dialog_width": 400,
+      "dialog_padding": 24,
+      "dialog_radius": 8,
+      "dialog_border_width": 1
+    },
+
+    "typography": {
+      // Elegant typography hierarchy inspired by Misty
+      "text_size": 16,
+      "text_line_height": 1.6,
+
+      "h1_size": 28,
+      "h1_weight": "bold",
+      "h2_size": 24,
+      "h2_weight": "semibold",
+      "h3_size": 20,
+      "h3_weight": "medium",
+      "h4_size": 18,
+      "h4_weight": "medium",
+      "h5_size": 16,
+      "h5_weight": "medium",
+      "h6_size": 14,
+      "h6_weight": "medium",
+
+      "code_size": 14,
+      "dialog_title_size": 18,
+      "dialog_title_weight": "semibold",
+      "dialog_body_size": 15,
+      "dialog_body_weight": "normal",
+      "dialog_button_size": 14,
+      "dialog_button_weight": "medium"
+    },
+
+    "placeholders": {
+      "empty_editing": "Start writing your thoughts..."
+    }
+  }
+}

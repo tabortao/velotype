@@ -1,0 +1,144 @@
+// One Dark Pro theme for Velotype
+// Based on the popular VSCode One Dark Pro color scheme
+{
+  "name": "One Dark Pro",
+  "creator": "Tao",
+  "description": "A dark theme inspired by VSCode's One Dark Pro with optimized colors for Markdown editing",
+  "version": "1.0.0",
+  "homepage": "https://github.com/Binaryify/OneDark-Pro",
+  "license": "MIT",
+  "theme": {
+    "colors": {
+      // Editor background - One Dark Pro's signature dark gray
+      "editor_background": "#282c34",
+
+      // Text colors - One Dark Pro foreground
+      "text_default": "#abb2bf",
+      "text_link": "#61afef",
+      "text_placeholder": "#5c6370",
+
+      // Headings - using One Dark Pro's syntax colors
+      "text_h1": "#e06c75",  // red
+      "text_h2": "#d19a66",  // orange
+      "text_h3": "#e5c07b",  // yellow
+      "text_h4": "#98c379",  // green
+      "text_h5": "#56b6c2",  // cyan
+      "text_h6": "#c678dd",  // purple
+
+      // Heading borders
+      "border_h1": "#e06c75",
+      "border_h2": "#d19a66",
+
+      // Quotes - using comment color
+      "text_quote": "#5c6370",
+      "border_quote": "#5c6370",
+
+      // Callouts with One Dark Pro semantic colors
+      "callout_note_bg": "#2c313c",
+      "callout_note_border": "#61afef",  // blue
+      "callout_tip_bg": "#2c313c",
+      "callout_tip_border": "#98c379",  // green
+      "callout_important_bg": "#2c313c",
+      "callout_important_border": "#56b6c2",  // cyan
+      "callout_warning_bg": "#2c313c",
+      "callout_warning_border": "#e5c07b",  // yellow
+      "callout_caution_bg": "#2c313c",
+      "callout_caution_border": "#e06c75",  // red
+
+      // Footnotes
+      "footnote_bg": "#2c313c",
+      "footnote_border": "#5c6370",
+      "footnote_badge_bg": "#61afef",
+      "footnote_badge_text": "#ffffff",
+      "footnote_backref": "#61afef",
+
+      // Task lists
+      "task_checkbox_border": "#5c6370",
+      "task_checkbox_bg": "#282c34",
+      "task_checkbox_checked_bg": "#98c379",
+      "task_checkbox_check": "#ffffff",
+
+      // Separators
+      "separator_color": "#5c6370",
+
+      // Code blocks - One Dark Pro code background
+      "code_bg": "#1e2127",
+      "code_text": "#abb2bf",
+      "code_language_input_bg": "#1e2127",
+      "code_language_input_border": "#5c6370",
+      "code_language_input_text": "#abb2bf",
+      "code_language_input_placeholder": "#5c6370",
+
+      // Syntax highlighting colors from One Dark Pro
+      "code_syntax_comment": "#5c6370",
+      "code_syntax_keyword": "#c678dd",  // purple
+      "code_syntax_string": "#98c379",   // green
+      "code_syntax_number": "#d19a66",   // orange
+      "code_syntax_type": "#56b6c2",     // cyan
+      "code_syntax_function": "#61afef",  // blue
+      "code_syntax_constant": "#d19a66",  // orange
+      "code_syntax_variable": "#e06c75",  // red
+      "code_syntax_property": "#abb2bf",  // default
+      "code_syntax_operator": "#abb2bf",  // default
+      "code_syntax_punctuation": "#abb2bf", // default
+
+      // Tables
+      "table_border": "#5c6370",
+      "table_header_bg": "#2c313c",
+      "table_cell_bg": "#282c34",
+      "table_cell_active_outline": "#61afef",
+      "table_axis_preview_bg": "#2c313c80",
+      "table_axis_selected_bg": "#61afef20",
+      "table_append_button_bg": "#2c313c",
+      "table_append_button_hover": "#3e4452",
+      "table_append_button_text": "#abb2bf",
+
+      // Images
+      "image_placeholder_bg": "#2c313c",
+      "image_placeholder_border": "#5c6370",
+      "image_placeholder_text": "#5c6370",
+      "image_caption_text": "#5c6370",
+
+      // UI elements
+      "scrollbar_thumb": "#5c6370",
+      "cursor": "#528bff",
+      "selection": "#3e4452",
+
+      // Dialogs
+      "dialog_backdrop": "#00000080",
+      "dialog_surface": "#282c34",
+      "dialog_border": "#5c6370",
+      "dialog_title": "#abb2bf",
+      "dialog_body": "#abb2bf",
+      "dialog_muted": "#5c6370",
+      "dialog_primary_button_bg": "#61afef",
+      "dialog_primary_button_hover": "#528bff",
+      "dialog_primary_button_text": "#ffffff",
+      "dialog_secondary_button_bg": "#3e4452",
+      "dialog_secondary_button_hover": "#5c6370",
+      "dialog_secondary_button_text": "#abb2bf",
+      "dialog_danger_button_bg": "#e06c75",
+      "dialog_danger_button_hover": "#be5046",
+      "dialog_danger_button_text": "#ffffff"
+    },
+
+    "dimensions": {
+      // Keep default dimensions for consistency
+    },
+
+    "typography": {
+      "h1_weight": "bold",
+      "h2_weight": "semibold",
+      "h3_weight": "medium",
+      "h4_weight": "medium",
+      "h5_weight": "medium",
+      "h6_weight": "medium",
+      "dialog_title_weight": "semibold",
+      "dialog_button_weight": "medium"
+    },
+
+    "placeholders": {
+      "empty_editing": "Start writing... (One Dark Pro theme)"
+    }
+  }
+}

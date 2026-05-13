@@ -1,0 +1,150 @@
+// One Light theme for Velotype
+// Based on Atom's One Light color scheme - a clean, bright theme for comfortable daytime editing
+{
+  "name": "One Light",
+  "creator": "Tao",
+  "description": "A light theme inspired by Atom's One Light with optimized colors for Markdown editing",
+  "version": "1.0.0",
+  "homepage": "https://github.com/atom/one-light-ui",
+  "license": "MIT",
+  "theme": {
+    "colors": {
+      // Editor background - One Light's clean white with subtle warmth
+      "editor_background": "#fafafa",
+
+      // Text colors - One Light foreground
+      "text_default": "#383a42",
+      "text_link": "#4078f2",
+      "text_placeholder": "#a0a1a7",
+
+      // Source mode block background
+      "source_mode_block_bg": "#f3f3f3",
+
+      // Comment background
+      "comment_bg": "#f0f0f0",
+
+      // Headings - using One Light's semantic colors
+      "text_h1": "#e45649",  // red
+      "text_h2": "#c18401",  // orange/gold
+      "text_h3": "#986801",  // brown/orange
+      "text_h4": "#50a14f",  // green
+      "text_h5": "#0184bb",  // blue-cyan
+      "text_h6": "#a626a4",  // purple
+
+      // Heading borders
+      "border_h1": "#e45649",
+      "border_h2": "#c18401",
+
+      // Quotes - using comment color
+      "text_quote": "#a0a1a7",
+      "border_quote": "#d0d0d0",
+
+      // Callouts with One Light semantic colors
+      "callout_note_bg": "#f0f6ff",
+      "callout_note_border": "#4078f2",  // blue
+      "callout_tip_bg": "#f0fff4",
+      "callout_tip_border": "#50a14f",  // green
+      "callout_important_bg": "#f0fdff",
+      "callout_important_border": "#0184bb",  // blue-cyan
+      "callout_warning_bg": "#fffbeb",
+      "callout_warning_border": "#986801",  // brown/orange
+      "callout_caution_bg": "#fff5f5",
+      "callout_caution_border": "#e45649",  // red
+
+      // Footnotes
+      "footnote_bg": "#f8f8f8",
+      "footnote_border": "#d0d0d0",
+      "footnote_badge_bg": "#4078f2",
+      "footnote_badge_text": "#ffffff",
+      "footnote_backref": "#4078f2",
+
+      // Task lists
+      "task_checkbox_border": "#d0d0d0",
+      "task_checkbox_bg": "#ffffff",
+      "task_checkbox_checked_bg": "#50a14f",
+      "task_checkbox_check": "#ffffff",
+
+      // Separators
+      "separator_color": "#e5e5e6",
+
+      // Code blocks - One Light code background
+      "code_bg": "#f6f8fa",
+      "code_text": "#383a42",
+      "code_language_input_bg": "#ffffff",
+      "code_language_input_border": "#d0d0d0",
+      "code_language_input_text": "#383a42",
+      "code_language_input_placeholder": "#a0a1a7",
+
+      // Syntax highlighting colors from One Light
+      "code_syntax_comment": "#a0a1a7",
+      "code_syntax_keyword": "#a626a4",  // purple
+      "code_syntax_string": "#50a14f",   // green
+      "code_syntax_number": "#986801",   // brown/orange
+      "code_syntax_type": "#0184bb",     // blue-cyan
+      "code_syntax_function": "#4078f2",  // blue
+      "code_syntax_constant": "#986801",  // brown/orange
+      "code_syntax_variable": "#e45649",  // red
+      "code_syntax_property": "#383a42",  // default
+      "code_syntax_operator": "#383a42",  // default
+      "code_syntax_punctuation": "#383a42", // default
+
+      // Tables
+      "table_border": "#e5e5e6",
+      "table_header_bg": "#f6f8fa",
+      "table_cell_bg": "#ffffff",
+      "table_cell_active_outline": "#4078f2",
+      "table_axis_preview_bg": "#f0f6ff80",
+      "table_axis_selected_bg": "#4078f220",
+      "table_append_button_bg": "#f6f8fa",
+      "table_append_button_hover": "#e5e5e6",
+      "table_append_button_text": "#383a42",
+
+      // Images
+      "image_placeholder_bg": "#f6f8fa",
+      "image_placeholder_border": "#e5e5e6",
+      "image_placeholder_text": "#a0a1a7",
+      "image_caption_text": "#a0a1a7",
+
+      // UI elements
+      "scrollbar_thumb": "#c0c0c0",
+      "cursor": "#4078f2",
+      "selection": "#e5e5e6",
+
+      // Dialogs
+      "dialog_backdrop": "#00000030",
+      "dialog_surface": "#ffffff",
+      "dialog_border": "#e5e5e6",
+      "dialog_title": "#383a42",
+      "dialog_body": "#383a42",
+      "dialog_muted": "#a0a1a7",
+      "dialog_primary_button_bg": "#4078f2",
+      "dialog_primary_button_hover": "#3567d6",
+      "dialog_primary_button_text": "#ffffff",
+      "dialog_secondary_button_bg": "#f6f8fa",
+      "dialog_secondary_button_hover": "#e5e5e6",
+      "dialog_secondary_button_text": "#383a42",
+      "dialog_danger_button_bg": "#e45649",
+      "dialog_danger_button_hover": "#d4392c",
+      "dialog_danger_button_text": "#ffffff"
+    },
+
+    "dimensions": {
+      // Keep default dimensions for consistency
+    },
+
+    "typography": {
+      "h1_weight": "bold",
+      "h2_weight": "semibold",
+      "h3_weight": "medium",
+      "h4_weight": "medium",
+      "h5_weight": "medium",
+      "h6_weight": "medium",
+      "dialog_title_weight": "semibold",
+      "dialog_button_weight": "medium"
+    },
+
+    "placeholders": {
+      "empty_editing": "Start writing... (One Light theme)"
+    }
+  }
+}
