@@ -20,7 +20,7 @@ mod net;
 mod theme;
 
 use app_menu::{init as init_app_menu, open_editor_window};
-use components::init as init_editor;
+use components::init_with_keybindings as init_editor;
 use i18n::I18nManager;
 use theme::ThemeManager;
 
@@ -28,13 +28,33 @@ fn main() {
     let input_paths: Vec<PathBuf> = std::env::args_os().skip(1).map(PathBuf::from).collect();
 
     Application::new().run(move |cx: &mut App| {
-        I18nManager::init(cx);
-        ThemeManager::init(cx);
+        let preferences = config::load_or_create_app_preferences().unwrap_or_else(|err| {
+            eprintln!("failed to initialize app preferences: {err}");
+            Default::default()
+        });
+        I18nManager::init_with_language_id(cx, &preferences.default_language_id);
+        ThemeManager::init_with_theme_id(cx, &preferences.default_theme_id);
         net::install_http_client(cx);
-        init_editor(cx);
+        init_editor(cx, &preferences.keybindings);
         init_app_menu(cx);
 
         if input_paths.is_empty() {
+            if preferences.startup_open == config::StartupOpenPreference::LastOpenedFile {
+                if let Some(path) = config::first_existing_recent_markdown_file() {
+                    match std::fs::read_to_string(&path) {
+                        Ok(markdown) => {
+                            open_editor_window(cx, markdown, Some(path));
+                            return;
+                        }
+                        Err(err) => {
+                            eprintln!(
+                                "failed to read last opened file '{}': {err}",
+                                path.display()
+                            );
+                        }
+                    }
+                }
+            }
             open_editor_window(cx, String::new(), None);
             return;
         }

@@ -9,11 +9,11 @@ use gpui::*;
 use super::element::{BlockTextElement, CodeLanguageInputElement};
 use super::{Block, BlockEvent, BlockKind, ImageResolvedSource, ImageRuntime};
 use crate::components::{
-    Editor, HtmlCssColor, HtmlDocument, HtmlNode, HtmlNodeKind, TableAxisHighlight, TableAxisKind,
-    TableAxisMarker, TableCellInlineImageSegment, TableColumnLayout, attr_value,
+    Editor, HtmlCssColor, HtmlDocument, HtmlNode, HtmlNodeKind, InlineScript, TableAxisHighlight,
+    TableAxisKind, TableAxisMarker, TableCellInlineImageSegment, TableColumnLayout, attr_value,
     display_math_font_size, inline_math_font_size, parse_display_math_source,
     parse_mermaid_fence_source, parse_table_cell_inline_images, render_display_math_svg,
-    render_inline_math_svg, render_mermaid_svg, resolve_image_source, style_for_node,
+    render_inline_math_svg, render_mermaid_svg_for_display, resolve_image_source, style_for_node,
 };
 use crate::i18n::{I18nManager, I18nStrings};
 use crate::theme::{Theme, ThemeDimensions, ThemeManager};
@@ -241,7 +241,7 @@ fn alphabetic_list_marker(ordinal: usize) -> String {
 }
 
 /// Converts an ASCII roman numeral string to its unicode ligature equivalents
-/// where possible (e.g. "III" → "Ⅲ", "VIII" → "Ⅷ").
+/// where possible (for example, "III" to a single roman numeral glyph).
 fn roman_list_marker(ordinal: usize) -> String {
     let ascii = ascii_roman_numeral(ordinal.max(1));
     let mut index = 0;
@@ -553,7 +553,7 @@ impl Block {
         }
     }
 
-    fn render_mermaid_content(&self, theme: &Theme) -> AnyElement {
+    fn render_mermaid_content(&self, theme: &Theme, window: &Window) -> AnyElement {
         let c = &theme.colors;
         let d = &theme.dimensions;
         let t = &theme.typography;
@@ -573,19 +573,44 @@ impl Block {
                 .into_any_element();
         };
 
-        match render_mermaid_svg(&source) {
-            Ok(rendered) => div()
-                .w_full()
-                .flex()
-                .justify_center()
-                .py(px(d.block_padding_y.max(6.0)))
-                .child(
-                    img(rendered.path)
-                        .max_w(Length::Definite(relative(1.0)))
-                        .max_h(px(d.image_root_max_height))
-                        .object_fit(ObjectFit::Contain),
-                )
-                .into_any_element(),
+        let viewport_width = f32::from(window.viewport_size().width.max(px(1.0)));
+        let available_width = effective_image_width(self, viewport_width, d);
+
+        match render_mermaid_svg_for_display(&source, available_width, viewport_width) {
+            Ok(rendered) => {
+                let display_width = rendered.display_width.max(1.0);
+                let display_height = rendered.display_height.max(1.0);
+                let image_path = rendered.path.clone();
+                let image = move || {
+                    img(image_path.clone())
+                        .w(px(display_width))
+                        .h(px(display_height))
+                };
+                let content = if display_width <= available_width + 0.5 {
+                    div()
+                        .w_full()
+                        .flex()
+                        .justify_center()
+                        .child(image())
+                        .into_any_element()
+                } else {
+                    div()
+                        .id(ElementId::Name(
+                            format!("mermaid-scroll-{}", self.record.id).into(),
+                        ))
+                        .w_full()
+                        .overflow_x_scroll()
+                        .scrollbar_width(px(0.0))
+                        .child(div().w(px(display_width)).child(image()))
+                        .into_any_element()
+                };
+
+                div()
+                    .w_full()
+                    .py(px(d.block_padding_y.max(6.0)))
+                    .child(content)
+                    .into_any_element()
+            }
             Err(err) => div()
                 .w_full()
                 .flex()
@@ -609,7 +634,7 @@ impl Block {
         }
     }
 
-    fn render_text_or_inline_math(
+    fn render_text_or_mixed_inline_visuals(
         &self,
         theme: &Theme,
         focused: bool,
@@ -621,7 +646,10 @@ impl Block {
         font_weight: FontWeight,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        if focused || is_placeholder || !self.has_inline_math() {
+        // Mixed inline visuals are display-only. Once focused, the text element
+        // takes over so caret movement, projection markers, and IME ranges stay
+        // anchored to editable text rather than rendered SVG/script offsets.
+        if focused || is_placeholder || !self.has_mixed_inline_visuals() {
             return match placeholder_text {
                 Some(placeholder) => BlockTextElement::with_placeholder(
                     cx.entity(),
@@ -634,10 +662,10 @@ impl Block {
             };
         }
 
-        self.render_inline_math_runs(theme, text_color, font_size, font_weight)
+        self.render_mixed_inline_visual_runs(theme, text_color, font_size, font_weight)
     }
 
-    fn render_inline_math_runs(
+    fn render_mixed_inline_visual_runs(
         &self,
         theme: &Theme,
         base_color: Hsla,
@@ -667,7 +695,7 @@ impl Block {
             .flex()
             .flex_wrap()
             .items_center()
-            .gap(px(2.0))
+            .gap(px(0.0))
             .text_size(px(font_size))
             .line_height(rems(theme.typography.text_line_height))
             .children(self.render_inline_tree_children(
@@ -769,9 +797,20 @@ impl Block {
             color = html_css_color_to_hsla(html_color, color);
         }
 
+        let script_offset = match span.style.script {
+            InlineScript::Normal => 0.0,
+            InlineScript::Superscript => -font_size * 0.28,
+            InlineScript::Subscript => font_size * 0.22,
+        };
+        let display_font_size = if span.style.has_script() {
+            (font_size * 0.72).max(6.0)
+        } else {
+            font_size
+        };
+
         let mut element = div()
             .min_w(px(0.0))
-            .text_size(px(font_size))
+            .text_size(px(display_font_size))
             .line_height(rems(theme.typography.text_line_height))
             .text_color(color)
             .font_weight(if span.style.bold {
@@ -780,6 +819,10 @@ impl Block {
                 font_weight
             })
             .child(SharedString::from(text.to_string()));
+
+        if script_offset != 0.0 {
+            element = element.relative().top(px(script_offset));
+        }
 
         if span.style.underline || span.link.is_some() || span.footnote.is_some() {
             element = element.underline();
@@ -1241,6 +1284,19 @@ impl Block {
         if let Some(bg) = node_style.background {
             element = element.bg(bg).rounded(px(3.0)).px(px(2.0));
         }
+        match node.tag_name.as_str() {
+            "sup" => {
+                element = element
+                    .relative()
+                    .top(px(-node_style.computed.font_size * 0.28))
+            }
+            "sub" => {
+                element = element
+                    .relative()
+                    .top(px(node_style.computed.font_size * 0.22))
+            }
+            _ => {}
+        }
         element.into_any_element()
     }
 
@@ -1416,6 +1472,8 @@ impl Block {
             .on_action(cx.listener(Self::on_end))
             .on_action(cx.listener(Self::on_select_left))
             .on_action(cx.listener(Self::on_select_right))
+            .on_action(cx.listener(Self::on_select_home))
+            .on_action(cx.listener(Self::on_select_end))
             .on_action(cx.listener(Self::on_select_all))
             .on_action(cx.listener(Self::on_copy))
             .on_action(cx.listener(Self::on_cut))
@@ -1583,7 +1641,7 @@ impl Render for Block {
             }
 
             return cell_base
-                .child(self.render_text_or_inline_math(
+                .child(self.render_text_or_mixed_inline_visuals(
                     &theme,
                     focused,
                     is_placeholder,
@@ -1699,7 +1757,7 @@ impl Render for Block {
                 .mb(px(d.h1_margin_bottom))
                 .border_b(px(d.h1_border_width))
                 .border_color(c.border_h1)
-                .child(self.render_text_or_inline_math(
+                .child(self.render_text_or_mixed_inline_visuals(
                     &theme,
                     focused,
                     is_placeholder,
@@ -1719,7 +1777,7 @@ impl Render for Block {
                 .mb(px(d.h1_margin_bottom))
                 .border_b(px(d.h1_border_width))
                 .border_color(c.border_h2)
-                .child(self.render_text_or_inline_math(
+                .child(self.render_text_or_mixed_inline_visuals(
                     &theme,
                     focused,
                     is_placeholder,
@@ -1735,7 +1793,7 @@ impl Render for Block {
                 .text_size(px(t.h3_size))
                 .font_weight(t.h3_weight.to_font_weight())
                 .text_color(c.text_h3)
-                .child(self.render_text_or_inline_math(
+                .child(self.render_text_or_mixed_inline_visuals(
                     &theme,
                     focused,
                     is_placeholder,
@@ -1751,7 +1809,7 @@ impl Render for Block {
                 .text_size(px(t.h4_size))
                 .font_weight(t.h4_weight.to_font_weight())
                 .text_color(c.text_h4)
-                .child(self.render_text_or_inline_math(
+                .child(self.render_text_or_mixed_inline_visuals(
                     &theme,
                     focused,
                     is_placeholder,
@@ -1767,7 +1825,7 @@ impl Render for Block {
                 .text_size(px(t.h5_size))
                 .font_weight(t.h5_weight.to_font_weight())
                 .text_color(c.text_h5)
-                .child(self.render_text_or_inline_math(
+                .child(self.render_text_or_mixed_inline_visuals(
                     &theme,
                     focused,
                     is_placeholder,
@@ -1783,7 +1841,7 @@ impl Render for Block {
                 .text_size(px(t.h6_size))
                 .font_weight(t.h6_weight.to_font_weight())
                 .text_color(c.text_h6)
-                .child(self.render_text_or_inline_math(
+                .child(self.render_text_or_mixed_inline_visuals(
                     &theme,
                     focused,
                     is_placeholder,
@@ -1822,10 +1880,8 @@ impl Render for Block {
                                 &strings,
                             ))
                         } else {
-                            div()
-                                .min_w(px(0.0))
-                                .flex_grow()
-                                .child(self.render_text_or_inline_math(
+                            div().min_w(px(0.0)).flex_grow().child(
+                                self.render_text_or_mixed_inline_visuals(
                                     &theme,
                                     focused,
                                     is_placeholder,
@@ -1835,13 +1891,12 @@ impl Render for Block {
                                     t.text_size,
                                     FontWeight::NORMAL,
                                     cx,
-                                ))
+                                ),
+                            )
                         }
                     } else {
-                        div()
-                            .min_w(px(0.0))
-                            .flex_grow()
-                            .child(self.render_text_or_inline_math(
+                        div().min_w(px(0.0)).flex_grow().child(
+                            self.render_text_or_mixed_inline_visuals(
                                 &theme,
                                 focused,
                                 is_placeholder,
@@ -1851,7 +1906,8 @@ impl Render for Block {
                                 t.text_size,
                                 FontWeight::NORMAL,
                                 cx,
-                            ))
+                            ),
+                        )
                     },
                 ])
                 .into_any_element(),
@@ -1917,7 +1973,7 @@ impl Render for Block {
                                 ))
                             } else {
                                 div().min_w(px(0.0)).flex_grow().child(
-                                    self.render_text_or_inline_math(
+                                    self.render_text_or_mixed_inline_visuals(
                                         &theme,
                                         focused,
                                         is_placeholder,
@@ -1931,10 +1987,8 @@ impl Render for Block {
                                 )
                             }
                         } else {
-                            div()
-                                .min_w(px(0.0))
-                                .flex_grow()
-                                .child(self.render_text_or_inline_math(
+                            div().min_w(px(0.0)).flex_grow().child(
+                                self.render_text_or_mixed_inline_visuals(
                                     &theme,
                                     focused,
                                     is_placeholder,
@@ -1944,7 +1998,8 @@ impl Render for Block {
                                     t.text_size,
                                     FontWeight::NORMAL,
                                     cx,
-                                ))
+                                ),
+                            )
                         },
                     ])
                     .into_any_element()
@@ -1979,10 +2034,8 @@ impl Render for Block {
                                 &strings,
                             ))
                         } else {
-                            div()
-                                .min_w(px(0.0))
-                                .flex_grow()
-                                .child(self.render_text_or_inline_math(
+                            div().min_w(px(0.0)).flex_grow().child(
+                                self.render_text_or_mixed_inline_visuals(
                                     &theme,
                                     focused,
                                     is_placeholder,
@@ -1992,13 +2045,12 @@ impl Render for Block {
                                     t.text_size,
                                     FontWeight::NORMAL,
                                     cx,
-                                ))
+                                ),
+                            )
                         }
                     } else {
-                        div()
-                            .min_w(px(0.0))
-                            .flex_grow()
-                            .child(self.render_text_or_inline_math(
+                        div().min_w(px(0.0)).flex_grow().child(
+                            self.render_text_or_mixed_inline_visuals(
                                 &theme,
                                 focused,
                                 is_placeholder,
@@ -2008,7 +2060,8 @@ impl Render for Block {
                                 t.text_size,
                                 FontWeight::NORMAL,
                                 cx,
-                            ))
+                            ),
+                        )
                     },
                 ])
                 .into_any_element(),
@@ -2016,7 +2069,7 @@ impl Render for Block {
                 .text_size(px(t.text_size))
                 .text_color(c.text_quote)
                 .line_height(rems(t.text_line_height))
-                .child(self.render_text_or_inline_math(
+                .child(self.render_text_or_mixed_inline_visuals(
                     &theme,
                     focused,
                     is_placeholder,
@@ -2047,7 +2100,7 @@ impl Render for Block {
                         .text_size(px(t.text_size))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(accent)
-                        .child(self.render_text_or_inline_math(
+                        .child(self.render_text_or_mixed_inline_visuals(
                             &theme,
                             focused,
                             is_placeholder,
@@ -2107,7 +2160,7 @@ impl Render for Block {
                             .min_w(px(0.0))
                             .flex_grow()
                             .text_color(c.text_quote)
-                            .child(self.render_text_or_inline_math(
+                            .child(self.render_text_or_mixed_inline_visuals(
                                 &theme,
                                 focused,
                                 is_placeholder,
@@ -2207,7 +2260,7 @@ impl Render for Block {
                                 )
                                 .on_mouse_up_out(
                                     MouseButton::Left,
-                                    cx.listener(Self::on_code_language_mouse_up),
+                                    cx.listener(Self::on_code_language_mouse_up_out),
                                 )
                                 .on_mouse_move(cx.listener(Self::on_code_language_mouse_move))
                                 .w(px(d.code_language_input_width))
@@ -2236,7 +2289,7 @@ impl Render for Block {
                         .text_size(px(t.text_size))
                         .text_color(c.text_default)
                         .line_height(rems(t.text_line_height))
-                        .child(self.render_text_or_inline_math(
+                        .child(self.render_text_or_mixed_inline_visuals(
                             &theme,
                             focused,
                             is_placeholder,
@@ -2681,7 +2734,7 @@ impl Render for Block {
                 let child = if focused {
                     BlockTextElement::new(cx.entity(), is_placeholder).into_any_element()
                 } else {
-                    self.render_mermaid_content(&theme)
+                    self.render_mermaid_content(&theme, window)
                 };
                 focused_base.w_full().child(child).into_any_element()
             }
@@ -2692,7 +2745,7 @@ impl Render for Block {
                 .text_size(px(t.text_size))
                 .text_color(c.text_default)
                 .line_height(rems(t.text_line_height))
-                .child(self.render_text_or_inline_math(
+                .child(self.render_text_or_mixed_inline_visuals(
                     &theme,
                     focused,
                     is_placeholder,

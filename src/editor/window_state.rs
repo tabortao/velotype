@@ -108,6 +108,7 @@ impl Editor {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.end_block_pointer_selection_sessions(cx);
         self.last_selection_snapshot = self.capture_source_selection_snapshot(cx);
         self.toggle_view_mode(cx);
     }
@@ -167,13 +168,14 @@ impl Editor {
     }
 
     pub(crate) fn toggle_view_mode(&mut self, cx: &mut Context<Self>) {
+        self.end_block_pointer_selection_sessions(cx);
         let selection_snapshot = self.capture_source_selection_snapshot(cx);
         self.clear_cross_block_selection(cx);
         match self.view_mode {
             ViewMode::Rendered => {
                 let markdown = self.document.markdown_text(cx);
                 let block = Self::new_block(cx, BlockRecord::paragraph(markdown));
-                block.update(cx, |block, _cx| block.set_source_raw_mode());
+                block.update(cx, |block, _cx| block.set_source_document_mode());
                 self.document.replace_roots(vec![block], cx);
                 self.view_mode = ViewMode::Source;
                 self.table_cells.clear();

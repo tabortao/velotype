@@ -25,6 +25,16 @@ pub struct InlineStyle {
     pub underline: bool,
     pub strikethrough: bool,
     pub code: bool,
+    pub script: InlineScript,
+}
+
+/// Vertical script style for simple Markdown extension syntax.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum InlineScript {
+    #[default]
+    Normal,
+    Superscript,
+    Subscript,
 }
 
 impl InlineStyle {
@@ -57,6 +67,24 @@ impl InlineStyle {
         Self { code: true, ..self }
     }
 
+    pub fn with_superscript(self) -> Self {
+        Self {
+            script: InlineScript::Superscript,
+            ..self
+        }
+    }
+
+    pub fn with_subscript(self) -> Self {
+        Self {
+            script: InlineScript::Subscript,
+            ..self
+        }
+    }
+
+    pub fn has_script(self) -> bool {
+        self.script != InlineScript::Normal
+    }
+
     fn apply(self, delimiter: Delimiter) -> Self {
         match delimiter {
             Delimiter::BoldMarkdown { .. } | Delimiter::BoldHtml => self.with_bold(),
@@ -64,6 +92,8 @@ impl InlineStyle {
             Delimiter::Underline => self.with_underline(),
             Delimiter::StrikethroughMarkdown => self.with_strikethrough(),
             Delimiter::CodeMarkdown { .. } => self.with_code(),
+            Delimiter::SuperscriptMarkdown | Delimiter::SuperscriptHtml => self.with_superscript(),
+            Delimiter::SubscriptMarkdown | Delimiter::SubscriptHtml => self.with_subscript(),
         }
     }
 }
@@ -493,6 +523,12 @@ impl InlineTextTree {
         self.fragments
             .iter()
             .any(|fragment| fragment.math.is_some())
+    }
+
+    pub(crate) fn has_mixed_inline_visuals(&self) -> bool {
+        self.fragments
+            .iter()
+            .any(|fragment| fragment.math.is_some() || fragment.style.has_script())
     }
 
     pub(crate) fn has_footnote_references(&self) -> bool {
@@ -1198,8 +1234,16 @@ enum Delimiter {
     ItalicMarkdown { marker: char },
     /// Markdown strikethrough marker `~~`.
     StrikethroughMarkdown,
+    /// Markdown superscript marker `^`.
+    SuperscriptMarkdown,
+    /// Markdown subscript marker `~`.
+    SubscriptMarkdown,
     /// HTML underline marker `<u>`.
     Underline,
+    /// HTML superscript marker `<sup>`.
+    SuperscriptHtml,
+    /// HTML subscript marker `<sub>`.
+    SubscriptHtml,
     /// HTML bold marker `<strong>`.
     BoldHtml,
     /// HTML italic marker `<em>`.
@@ -1216,7 +1260,11 @@ impl Delimiter {
             Self::BoldMarkdown { marker } => marker.to_string().repeat(2),
             Self::ItalicMarkdown { marker } => marker.to_string(),
             Self::StrikethroughMarkdown => "~~".into(),
+            Self::SuperscriptMarkdown => "^".into(),
+            Self::SubscriptMarkdown => "~".into(),
             Self::Underline => "<u>".into(),
+            Self::SuperscriptHtml => "<sup>".into(),
+            Self::SubscriptHtml => "<sub>".into(),
             Self::BoldHtml => "<strong>".into(),
             Self::ItalicHtml => "<em>".into(),
             Self::CodeMarkdown { run_len } => "`".repeat(run_len),
@@ -1228,7 +1276,11 @@ impl Delimiter {
             Self::BoldMarkdown { marker } => marker.to_string().repeat(2),
             Self::ItalicMarkdown { marker } => marker.to_string(),
             Self::StrikethroughMarkdown => "~~".into(),
+            Self::SuperscriptMarkdown => "^".into(),
+            Self::SubscriptMarkdown => "~".into(),
             Self::Underline => "</u>".into(),
+            Self::SuperscriptHtml => "</sup>".into(),
+            Self::SubscriptHtml => "</sub>".into(),
             Self::BoldHtml => "</strong>".into(),
             Self::ItalicHtml => "</em>".into(),
             Self::CodeMarkdown { run_len } => "`".repeat(run_len),
@@ -1247,15 +1299,20 @@ impl Delimiter {
             Self::BoldMarkdown { .. } => 0,
             Self::Underline => 1,
             Self::StrikethroughMarkdown => 2,
-            Self::ItalicMarkdown { .. } => 3,
-            Self::BoldHtml => 4,
-            Self::ItalicHtml => 5,
-            Self::CodeMarkdown { .. } => 6,
+            Self::SuperscriptMarkdown | Self::SubscriptMarkdown => 3,
+            Self::ItalicMarkdown { .. } => 4,
+            Self::SuperscriptHtml | Self::SubscriptHtml => 5,
+            Self::BoldHtml => 6,
+            Self::ItalicHtml => 7,
+            Self::CodeMarkdown { .. } => 8,
         }
     }
 
     fn is_html(self) -> bool {
-        matches!(self, Self::BoldHtml | Self::ItalicHtml)
+        matches!(
+            self,
+            Self::BoldHtml | Self::ItalicHtml | Self::SuperscriptHtml | Self::SubscriptHtml
+        )
     }
 }
 
@@ -1272,6 +1329,10 @@ pub(crate) enum StyleFlag {
     Strikethrough,
     /// Inline code text.
     Code,
+    /// Superscript text.
+    Superscript,
+    /// Subscript text.
+    Subscript,
 }
 
 /// Source character plus style and byte range used by inline parsing.
@@ -1334,6 +1395,9 @@ impl NormalizeBuilder {
         }
         if extra_style.code {
             style.code = true;
+        }
+        if extra_style.has_script() {
+            style.script = extra_style.script;
         }
         let html_style = merge_html_styles(html_style, token.html_style);
 
@@ -1440,6 +1504,12 @@ fn parse_until(
             let closed = match end_delim {
                 Delimiter::CodeMarkdown { run_len } => {
                     tokens[index].ch == '`' && backtick_run_len(tokens, index) == *run_len
+                }
+                Delimiter::SuperscriptMarkdown => {
+                    tokens[index].ch == '^' && can_close_emphasis(tokens, index)
+                }
+                Delimiter::SubscriptMarkdown => {
+                    is_single_tilde_delimiter(tokens, index) && can_close_emphasis(tokens, index)
                 }
                 _ => {
                     matches_sequence(tokens, index, &end_delim.close())
@@ -1944,6 +2014,8 @@ fn inline_html_semantic_style(name: &str, style: InlineStyle) -> InlineStyle {
         "u" | "ins" => style.with_underline(),
         "del" => style.with_strikethrough(),
         "code" | "kbd" => style.with_code(),
+        "sup" => style.with_superscript(),
+        "sub" => style.with_subscript(),
         _ => style,
     }
 }
@@ -2330,6 +2402,9 @@ fn apply_extra_style_to_fragments(
         if extra_style.code {
             fragment.style.code = true;
         }
+        if extra_style.has_script() {
+            fragment.style.script = extra_style.script;
+        }
         fragment.html_style = merge_html_styles(extra_html_style, fragment.html_style);
     }
 }
@@ -2343,6 +2418,10 @@ fn match_open_delimiter(tokens: &[CharToken], index: usize) -> Option<Delimiter>
         Some(Delimiter::Underline)
     } else if matches_sequence(tokens, index, "~~") {
         Some(Delimiter::StrikethroughMarkdown)
+    } else if matches_sequence(tokens, index, "^") && can_open_script(tokens, index, '^') {
+        Some(Delimiter::SuperscriptMarkdown)
+    } else if is_single_tilde_delimiter(tokens, index) && can_open_script(tokens, index, '~') {
+        Some(Delimiter::SubscriptMarkdown)
     } else if matches_sequence(tokens, index, "**") && can_open_emphasis(tokens, index, 2) {
         Some(Delimiter::BoldMarkdown { marker: '*' })
     } else if matches_sequence(tokens, index, "__") && can_open_emphasis(tokens, index, 2) {
@@ -2405,6 +2484,18 @@ fn has_closing_delimiter(tokens: &[CharToken], index: usize, delimiter: Delimite
         return false;
     }
 
+    if matches!(
+        delimiter,
+        Delimiter::SuperscriptMarkdown | Delimiter::SubscriptMarkdown
+    ) {
+        let marker = match delimiter {
+            Delimiter::SuperscriptMarkdown => '^',
+            Delimiter::SubscriptMarkdown => '~',
+            _ => unreachable!(),
+        };
+        return locate_script_close(tokens, index + skip, marker).is_some();
+    }
+
     let mut cursor = index + skip;
     while cursor < tokens.len() {
         if tokens[cursor].ch == '\\'
@@ -2422,6 +2513,47 @@ fn has_closing_delimiter(tokens: &[CharToken], index: usize, delimiter: Delimite
     }
 
     false
+}
+
+fn locate_script_close(tokens: &[CharToken], mut cursor: usize, marker: char) -> Option<usize> {
+    let body_start = cursor;
+    while cursor < tokens.len() {
+        if tokens[cursor].ch == '\\'
+            && let Some(escaped_len) = escaped_sequence_token_len(tokens, cursor)
+        {
+            cursor += 1 + escaped_len;
+            continue;
+        }
+
+        let is_close = if marker == '~' {
+            is_single_tilde_delimiter(tokens, cursor)
+        } else {
+            tokens[cursor].ch == marker
+        };
+        if is_close {
+            return valid_script_body(tokens, body_start, cursor).then_some(cursor);
+        }
+
+        cursor += 1;
+    }
+
+    None
+}
+
+fn valid_script_body(tokens: &[CharToken], start: usize, end: usize) -> bool {
+    start < end
+        && tokens[start..end]
+            .iter()
+            .all(|token| token.ch.is_ascii_alphanumeric())
+}
+
+fn is_single_tilde_delimiter(tokens: &[CharToken], index: usize) -> bool {
+    tokens.get(index).is_some_and(|token| token.ch == '~')
+        && index
+            .checked_sub(1)
+            .and_then(|prev| tokens.get(prev))
+            .is_none_or(|token| token.ch != '~')
+        && tokens.get(index + 1).is_none_or(|token| token.ch != '~')
 }
 
 fn matches_sequence(tokens: &[CharToken], index: usize, sequence: &str) -> bool {
@@ -2461,6 +2593,7 @@ fn escaped_sequence_token_len(tokens: &[CharToken], index: usize) -> Option<usiz
         || matches_sequence(tokens, next_index, "[")
         || matches_sequence(tokens, next_index, "]")
         || matches_sequence(tokens, next_index, "`")
+        || matches_sequence(tokens, next_index, "^")
     {
         Some(1)
     } else {
@@ -2592,6 +2725,17 @@ fn escape_literal_text_with_offset_map(text: &str) -> InlineMarkdownOffsetMap {
             continue;
         }
 
+        if text[index..].starts_with('^') {
+            let start = escaped.len();
+            escaped.push_str("\\^");
+            markdown_to_visible.resize(escaped.len() + 1, index);
+            for local in 0..=escaped.len() - start {
+                markdown_to_visible[start + local] = index;
+            }
+            index += 1;
+            continue;
+        }
+
         if text[index..].starts_with('`') {
             let start = escaped.len();
             escaped.push_str("\\`");
@@ -2670,7 +2814,16 @@ fn escape_code_span_text_with_offset_map(text: &str) -> InlineMarkdownOffsetMap 
 /// transition would produce 4+ consecutive `*` characters (Markdown ambiguity).
 fn choose_fragment_stacks(fragments: &[InlineFragment]) -> Vec<Vec<Delimiter>> {
     // Enumerate the 1-2 possible delimiter stacks for each fragment's style.
-    let variants = fragments.iter().map(stack_variants).collect::<Vec<_>>();
+    let variants = fragments
+        .iter()
+        .enumerate()
+        .map(|(index, fragment)| {
+            stack_variants(
+                fragment,
+                index.checked_sub(1).and_then(|i| fragments.get(i)),
+            )
+        })
+        .collect::<Vec<_>>();
 
     // DP table: costs[fragment_index][choice_index]
     let mut costs: Vec<Vec<usize>> = variants
@@ -2738,7 +2891,10 @@ fn choose_fragment_stacks(fragments: &[InlineFragment]) -> Vec<Vec<Delimiter>> {
     chosen
 }
 
-fn stack_variants(fragment: &InlineFragment) -> Vec<Vec<Delimiter>> {
+fn stack_variants(
+    fragment: &InlineFragment,
+    previous_fragment: Option<&InlineFragment>,
+) -> Vec<Vec<Delimiter>> {
     let style = fragment.style;
     let code_run_len = style.code.then(|| code_delimiter_run_len(&fragment.text));
     let mut markdown_stack = Vec::new();
@@ -2750,6 +2906,22 @@ fn stack_variants(fragment: &InlineFragment) -> Vec<Vec<Delimiter>> {
     }
     if style.strikethrough {
         markdown_stack.push(Delimiter::StrikethroughMarkdown);
+    }
+    match style.script {
+        InlineScript::Normal => {}
+        InlineScript::Superscript
+            if can_use_markdown_script_delimiters(previous_fragment, fragment) =>
+        {
+            markdown_stack.push(Delimiter::SuperscriptMarkdown)
+        }
+        InlineScript::Superscript => markdown_stack.push(Delimiter::SuperscriptHtml),
+        InlineScript::Subscript
+            if style.strikethrough
+                || !can_use_markdown_script_delimiters(previous_fragment, fragment) =>
+        {
+            markdown_stack.push(Delimiter::SubscriptHtml)
+        }
+        InlineScript::Subscript => markdown_stack.push(Delimiter::SubscriptMarkdown),
     }
     if style.italic {
         markdown_stack.push(Delimiter::ItalicMarkdown { marker: '*' });
@@ -2774,6 +2946,11 @@ fn stack_variants(fragment: &InlineFragment) -> Vec<Vec<Delimiter>> {
     if style.strikethrough {
         html_stack.push(Delimiter::StrikethroughMarkdown);
     }
+    match style.script {
+        InlineScript::Normal => {}
+        InlineScript::Superscript => html_stack.push(Delimiter::SuperscriptHtml),
+        InlineScript::Subscript => html_stack.push(Delimiter::SubscriptHtml),
+    }
     if style.italic {
         html_stack.push(Delimiter::ItalicHtml);
     }
@@ -2782,6 +2959,42 @@ fn stack_variants(fragment: &InlineFragment) -> Vec<Vec<Delimiter>> {
     }
 
     vec![markdown_stack, html_stack]
+}
+
+pub(crate) fn can_use_markdown_script_delimiters(
+    previous_fragment: Option<&InlineFragment>,
+    fragment: &InlineFragment,
+) -> bool {
+    // This guard is shared by serialization and inline projection. Markdown
+    // script markers need a plain ASCII owner immediately before the script
+    // fragment; otherwise we fall back to <sup>/<sub> so the next parse sees
+    // the same style boundary.
+    let Some(previous) = previous_fragment else {
+        return false;
+    };
+    if previous.style.has_script() {
+        return false;
+    }
+    previous
+        .text
+        .chars()
+        .next_back()
+        .is_some_and(|ch| ch.is_ascii_alphanumeric())
+        && previous.html_style == fragment.html_style
+        && previous.link == fragment.link
+        && previous.footnote.is_none()
+        && fragment.footnote.is_none()
+        && previous.math.is_none()
+        && fragment.math.is_none()
+        && styles_match_ignoring_script(previous.style, fragment.style)
+}
+
+fn styles_match_ignoring_script(left: InlineStyle, right: InlineStyle) -> bool {
+    left.bold == right.bold
+        && left.italic == right.italic
+        && left.underline == right.underline
+        && left.strikethrough == right.strikethrough
+        && left.code == right.code
 }
 
 fn code_delimiter_run_len(text: &str) -> usize {
@@ -2887,6 +3100,8 @@ fn style_flag_enabled(style: InlineStyle, flag: StyleFlag) -> bool {
         StyleFlag::Underline => style.underline,
         StyleFlag::Strikethrough => style.strikethrough,
         StyleFlag::Code => style.code,
+        StyleFlag::Superscript => style.script == InlineScript::Superscript,
+        StyleFlag::Subscript => style.script == InlineScript::Subscript,
     }
 }
 
@@ -2897,6 +3112,24 @@ fn set_style_flag(mut style: InlineStyle, flag: StyleFlag, enabled: bool) -> Inl
         StyleFlag::Underline => style.underline = enabled,
         StyleFlag::Strikethrough => style.strikethrough = enabled,
         StyleFlag::Code => style.code = enabled,
+        StyleFlag::Superscript => {
+            style.script = if enabled {
+                InlineScript::Superscript
+            } else if style.script == InlineScript::Superscript {
+                InlineScript::Normal
+            } else {
+                style.script
+            }
+        }
+        StyleFlag::Subscript => {
+            style.script = if enabled {
+                InlineScript::Subscript
+            } else if style.script == InlineScript::Subscript {
+                InlineScript::Normal
+            } else {
+                style.script
+            }
+        }
     }
     style
 }
@@ -2921,6 +3154,22 @@ fn can_open_emphasis(tokens: &[CharToken], index: usize, len: usize) -> bool {
         .unwrap_or(false)
 }
 
+fn can_open_script(tokens: &[CharToken], index: usize, marker: char) -> bool {
+    if token_is_backslash_escaped(tokens, index) {
+        return false;
+    }
+
+    if marker == '~' && !is_single_tilde_delimiter(tokens, index) {
+        return false;
+    }
+
+    index > 0
+        && tokens[index - 1].ch.is_ascii_alphanumeric()
+        && tokens
+            .get(index + 1)
+            .is_some_and(|token| token.ch.is_ascii_alphanumeric())
+}
+
 fn can_close_emphasis(tokens: &[CharToken], index: usize) -> bool {
     index > 0 && !tokens[index - 1].ch.is_whitespace()
 }
@@ -2928,8 +3177,8 @@ fn can_close_emphasis(tokens: &[CharToken], index: usize) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        InlineFragment, InlineInsertionAttributes, InlineLinkHit, InlineMathDelimiter, InlineStyle,
-        InlineTextTree, LinkReferenceDefinitions, StyleFlag,
+        InlineFragment, InlineInsertionAttributes, InlineLinkHit, InlineMathDelimiter,
+        InlineScript, InlineStyle, InlineTextTree, LinkReferenceDefinitions, StyleFlag,
     };
     use crate::components::HtmlCssColor;
 
@@ -3011,6 +3260,7 @@ mod tests {
                 underline: true,
                 strikethrough: false,
                 code: false,
+                script: InlineScript::Normal,
             }
         );
     }
@@ -3050,6 +3300,58 @@ mod tests {
         assert_eq!(tree.visible_text(), "text");
         assert!(cache.style_at(0).strikethrough);
         assert_eq!(tree.serialize_markdown(), "~~text~~");
+    }
+
+    #[test]
+    fn parses_and_serializes_superscript() {
+        let tree = InlineTextTree::from_markdown("x^2^");
+        let cache = tree.render_cache();
+
+        assert_eq!(tree.visible_text(), "x2");
+        assert_eq!(cache.style_at(1).script, InlineScript::Superscript);
+        assert_eq!(tree.serialize_markdown(), "x^2^");
+    }
+
+    #[test]
+    fn parses_and_serializes_subscript_without_conflicting_with_strikethrough() {
+        let tree = InlineTextTree::from_markdown("H~2~O and ~~old~~");
+        let cache = tree.render_cache();
+
+        assert_eq!(tree.visible_text(), "H2O and old");
+        assert_eq!(cache.style_at(1).script, InlineScript::Subscript);
+        assert!(cache.style_at("H2O and ".len()).strikethrough);
+        assert_eq!(tree.serialize_markdown(), "H~2~O and ~~old~~");
+    }
+
+    #[test]
+    fn script_markers_require_ascii_context_and_ascii_body() {
+        for markdown in ["\\^2^", "\\~2~", "汉^2^", "H~二~O", "`x^2^ H~2~O`"] {
+            let tree = InlineTextTree::from_markdown(markdown);
+            assert!(
+                tree.render_cache()
+                    .spans()
+                    .iter()
+                    .all(|span| span.style.script == InlineScript::Normal),
+                "{markdown} should not produce script spans"
+            );
+        }
+    }
+
+    #[test]
+    fn inline_html_sup_and_sub_map_to_script_style() {
+        let tree = InlineTextTree::from_markdown("x<sup>2</sup> and H<sub>2</sub>O");
+        let cache = tree.render_cache();
+
+        assert_eq!(tree.visible_text(), "x2 and H2O");
+        assert_eq!(cache.style_at(1).script, InlineScript::Superscript);
+        assert_eq!(
+            cache.style_at("x2 and H".len()).script,
+            InlineScript::Subscript
+        );
+        assert_eq!(tree.serialize_markdown(), "x^2^ and H~2~O");
+
+        let standalone = InlineTextTree::from_markdown("<sup>2</sup>");
+        assert_eq!(standalone.serialize_markdown(), "<sup>2</sup>");
     }
 
     #[test]
@@ -3528,7 +3830,7 @@ mod tests {
         // Per CommonMark: a backtick run that has no matching closing run
         // is treated as literal text.
         let tree = InlineTextTree::from_markdown("``");
-        // Two backticks with no closing → literal (run_len=2, no matching close)
+        // Two backticks with no closing -> literal (run_len=2, no matching close).
         assert_eq!(tree.visible_text(), "``");
         assert!(!tree.render_cache().style_at(0).code);
     }
@@ -3646,17 +3948,17 @@ mod tests {
 
     #[test]
     fn source_to_rendered_round_trip_preserves_code_span() {
-        // Simulate Source→Rendered: raw markdown → from_markdown parses it.
+        // Simulate Source -> Rendered: raw markdown -> from_markdown parses it.
         let raw = "`123`";
         let tree = InlineTextTree::from_markdown(raw);
         assert_eq!(tree.visible_text(), "123");
         assert!(tree.render_cache().style_at(0).code);
 
-        // Serialize back — must produce valid markdown.
+        // Serialize back: must produce valid markdown.
         let serialized = tree.serialize_markdown();
         assert_eq!(serialized, "`123`");
 
-        // Re-parse — must produce same result.
+        // Re-parse: must produce same result.
         let reparsed = InlineTextTree::from_markdown(&serialized);
         assert_eq!(reparsed.visible_text(), "123");
         assert!(reparsed.render_cache().style_at(0).code);

@@ -12,10 +12,14 @@ use gpui::*;
 use crate::app_identity::VELOTYPE_APP_ID;
 use crate::components::{
     AddLanguageConfig, AddThemeConfig, CheckForUpdates, ExportHtml, ExportPdf, NewWindow,
-    NoRecentFiles, OpenFile, OpenRecentFile, QuitApplication, SaveDocument, SaveDocumentAs,
-    SelectLanguage, SelectTheme, ShowAbout,
+    NoRecentFiles, OpenFile, OpenPreferences, OpenRecentFile, QuitApplication, SaveDocument,
+    SaveDocumentAs, SelectLanguage, SelectTheme, ShowAbout,
 };
-use crate::config::{read_recent_files, record_recent_file, remove_recent_file};
+use crate::config::{
+    apply_configured_language, apply_configured_theme, import_language_config_and_select,
+    import_theme_config_and_select, open_preferences_window, read_recent_files, record_recent_file,
+    remove_recent_file,
+};
 use crate::editor::{Editor, InfoDialogKind};
 use crate::export::ExportFormat;
 use crate::i18n::I18nManager;
@@ -141,6 +145,15 @@ fn recent_files_for_menu() -> Vec<PathBuf> {
 }
 
 fn open_recent_file(cx: &mut App, path: PathBuf) {
+    let error_window = cx.active_window();
+    open_recent_file_with_error_window(cx, path, error_window);
+}
+
+fn open_recent_file_with_error_window(
+    cx: &mut App,
+    path: PathBuf,
+    error_window: Option<AnyWindowHandle>,
+) {
     if !path.is_file() {
         if let Err(err) = remove_recent_file(&path) {
             eprintln!("failed to remove missing recent file: {err}");
@@ -151,12 +164,7 @@ fn open_recent_file(cx: &mut App, path: PathBuf) {
         let detail = strings
             .recent_file_missing_message_template
             .replace("{path}", &path.to_string_lossy());
-        show_window_prompt(
-            cx.active_window(),
-            strings.recent_file_missing_title,
-            &detail,
-            cx,
-        );
+        show_window_prompt(error_window, strings.recent_file_missing_title, &detail, cx);
         return;
     }
 
@@ -166,7 +174,7 @@ fn open_recent_file(cx: &mut App, path: PathBuf) {
             .strings()
             .open_failed_title
             .clone();
-        show_window_prompt(cx.active_window(), title, &err.to_string(), cx);
+        show_window_prompt(error_window, title, &err.to_string(), cx);
     }
 }
 
@@ -178,6 +186,17 @@ fn is_editor_scoped_menu_action(action: &dyn Action) -> bool {
         || action.as_any().is::<QuitApplication>()
         || action.as_any().is::<CheckForUpdates>()
         || action.as_any().is::<ShowAbout>()
+}
+
+fn is_window_context_menu_action(action: &dyn Action) -> bool {
+    action.as_any().is::<NewWindow>()
+        || action.as_any().is::<OpenFile>()
+        || action.as_any().is::<OpenPreferences>()
+        || action.as_any().is::<OpenRecentFile>()
+        || action.as_any().is::<NoRecentFiles>()
+        || action.as_any().is::<AddLanguageConfig>()
+        || action.as_any().is::<AddThemeConfig>()
+        || is_editor_scoped_menu_action(action)
 }
 
 fn current_window_candidates(cx: &mut App) -> Vec<AnyWindowHandle> {
@@ -238,6 +257,8 @@ pub(crate) fn dispatch_menu_action(action: &dyn Action, cx: &mut App) {
         open_editor_window(cx, String::new(), None);
     } else if action.as_any().is::<OpenFile>() {
         prompt_and_open_files(cx);
+    } else if action.as_any().is::<OpenPreferences>() {
+        open_preferences_window(cx);
     } else if let Some(action) = action.as_any().downcast_ref::<OpenRecentFile>() {
         open_recent_file(cx, PathBuf::from(&action.path));
     } else if action.as_any().is::<NoRecentFiles>() {
@@ -258,20 +279,38 @@ pub(crate) fn dispatch_menu_action(action: &dyn Action, cx: &mut App) {
             editor.export_document_via_prompt(ExportFormat::Pdf, window, cx)
         });
     } else if let Some(action) = action.as_any().downcast_ref::<SelectTheme>() {
-        let changed = cx.update_global::<ThemeManager, _>(|theme_manager, _cx| {
-            theme_manager.set_theme_by_id(&action.theme_id)
-        });
-        if changed {
-            install_menus(cx);
-            cx.refresh_windows();
+        match apply_configured_theme(cx, &action.theme_id) {
+            Ok(changed) => {
+                if changed {
+                    install_menus(cx);
+                    cx.refresh_windows();
+                }
+            }
+            Err(err) => {
+                let title = cx
+                    .global::<I18nManager>()
+                    .strings()
+                    .preferences_save_failed_title
+                    .clone();
+                show_window_prompt(cx.active_window(), title, &err.to_string(), cx);
+            }
         }
     } else if let Some(action) = action.as_any().downcast_ref::<SelectLanguage>() {
-        let changed = cx.update_global::<I18nManager, _>(|i18n_manager, _cx| {
-            i18n_manager.set_language_by_id(&action.language_id)
-        });
-        if changed {
-            install_menus(cx);
-            cx.refresh_windows();
+        match apply_configured_language(cx, &action.language_id) {
+            Ok(changed) => {
+                if changed {
+                    install_menus(cx);
+                    cx.refresh_windows();
+                }
+            }
+            Err(err) => {
+                let title = cx
+                    .global::<I18nManager>()
+                    .strings()
+                    .preferences_save_failed_title
+                    .clone();
+                show_window_prompt(cx.active_window(), title, &err.to_string(), cx);
+            }
         }
     } else if action.as_any().is::<CheckForUpdates>() {
         request_update_check_on_active_editor(cx);
@@ -290,7 +329,7 @@ pub(crate) fn dispatch_menu_action_for_editor(
     window: &mut Window,
     cx: &mut App,
 ) {
-    if !is_editor_scoped_menu_action(action) {
+    if !is_window_context_menu_action(action) {
         let deferred_action = action.boxed_clone();
         cx.defer(move |cx| {
             dispatch_menu_action(deferred_action.as_ref(), cx);
@@ -298,7 +337,23 @@ pub(crate) fn dispatch_menu_action_for_editor(
         return;
     }
 
-    if action.as_any().is::<SaveDocument>() {
+    window.activate_window();
+    let current_window = Some(window.window_handle());
+
+    if action.as_any().is::<NewWindow>() {
+        open_editor_window(cx, String::new(), None);
+    } else if action.as_any().is::<OpenFile>() {
+        prompt_and_open_files_with_error_window(cx, current_window);
+    } else if action.as_any().is::<OpenPreferences>() {
+        open_preferences_window(cx);
+    } else if let Some(action) = action.as_any().downcast_ref::<OpenRecentFile>() {
+        open_recent_file_with_error_window(cx, PathBuf::from(&action.path), current_window);
+    } else if action.as_any().is::<NoRecentFiles>() {
+    } else if action.as_any().is::<AddLanguageConfig>() {
+        prompt_and_import_language_config_with_error_window(cx, current_window);
+    } else if action.as_any().is::<AddThemeConfig>() {
+        prompt_and_import_theme_config_with_error_window(cx, current_window);
+    } else if action.as_any().is::<SaveDocument>() {
         let _ = target.update(cx, |editor, cx| editor.request_save_document(cx));
     } else if action.as_any().is::<SaveDocumentAs>() {
         let _ = target.update(cx, |editor, cx| editor.request_save_document_as(cx));
@@ -405,6 +460,7 @@ fn build_menus(
                     name: strings.menu_open_recent_file.clone().into(),
                     items: recent_items,
                 }),
+                MenuItem::action(strings.menu_preferences.clone(), OpenPreferences),
                 MenuItem::separator(),
                 MenuItem::action(strings.menu_save.clone(), SaveDocument),
                 MenuItem::action(strings.menu_save_as.clone(), SaveDocumentAs),
@@ -449,6 +505,11 @@ pub(crate) fn install_menus(cx: &mut App) {
 }
 
 fn prompt_and_open_files(cx: &mut App) {
+    let error_window = cx.active_window();
+    prompt_and_open_files_with_error_window(cx, error_window);
+}
+
+fn prompt_and_open_files_with_error_window(cx: &mut App, error_window: Option<AnyWindowHandle>) {
     let prompt_title = cx
         .global::<I18nManager>()
         .strings()
@@ -460,7 +521,6 @@ fn prompt_and_open_files(cx: &mut App) {
         multiple: true,
         prompt: Some(prompt_title.into()),
     });
-    let error_window = cx.active_window();
 
     cx.spawn(async move |cx| match prompt.await {
         Ok(Ok(Some(paths))) => {
@@ -494,6 +554,14 @@ fn prompt_and_open_files(cx: &mut App) {
 }
 
 fn prompt_and_import_language_config(cx: &mut App) {
+    let error_window = cx.active_window();
+    prompt_and_import_language_config_with_error_window(cx, error_window);
+}
+
+fn prompt_and_import_language_config_with_error_window(
+    cx: &mut App,
+    error_window: Option<AnyWindowHandle>,
+) {
     let prompt_title = cx
         .global::<I18nManager>()
         .strings()
@@ -505,7 +573,6 @@ fn prompt_and_import_language_config(cx: &mut App) {
         multiple: false,
         prompt: Some(prompt_title.into()),
     });
-    let error_window = cx.active_window();
 
     cx.spawn(async move |cx| match prompt.await {
         Ok(Ok(Some(paths))) => {
@@ -513,9 +580,7 @@ fn prompt_and_import_language_config(cx: &mut App) {
                 return;
             };
             let _ = cx.update(move |cx| {
-                let result = cx.update_global::<I18nManager, _>(|i18n_manager, _cx| {
-                    i18n_manager.import_language_config(&path)
-                });
+                let result = import_language_config_and_select(cx, &path);
                 match result {
                     Ok(_) => {
                         install_menus(cx);
@@ -549,6 +614,14 @@ fn prompt_and_import_language_config(cx: &mut App) {
 }
 
 fn prompt_and_import_theme_config(cx: &mut App) {
+    let error_window = cx.active_window();
+    prompt_and_import_theme_config_with_error_window(cx, error_window);
+}
+
+fn prompt_and_import_theme_config_with_error_window(
+    cx: &mut App,
+    error_window: Option<AnyWindowHandle>,
+) {
     let prompt_title = cx
         .global::<I18nManager>()
         .strings()
@@ -560,7 +633,6 @@ fn prompt_and_import_theme_config(cx: &mut App) {
         multiple: false,
         prompt: Some(prompt_title.into()),
     });
-    let error_window = cx.active_window();
 
     cx.spawn(async move |cx| match prompt.await {
         Ok(Ok(Some(paths))) => {
@@ -568,9 +640,7 @@ fn prompt_and_import_theme_config(cx: &mut App) {
                 return;
             };
             let _ = cx.update(move |cx| {
-                let result = cx.update_global::<ThemeManager, _>(|theme_manager, _cx| {
-                    theme_manager.import_theme_config(&path)
-                });
+                let result = import_theme_config_and_select(cx, &path);
                 match result {
                     Ok(_) => {
                         install_menus(cx);
@@ -621,6 +691,9 @@ pub(crate) fn init(cx: &mut App) {
     cx.on_action(|_: &OpenFile, cx| {
         dispatch_menu_action(&OpenFile, cx);
     });
+    cx.on_action(|_: &OpenPreferences, cx| {
+        dispatch_menu_action(&OpenPreferences, cx);
+    });
     cx.on_action(|action: &OpenRecentFile, cx| {
         dispatch_menu_action(action, cx);
     });
@@ -669,8 +742,9 @@ pub(crate) fn init(cx: &mut App) {
 mod tests {
     use super::build_menus;
     use crate::components::{
-        AddLanguageConfig, AddThemeConfig, CheckForUpdates, ExportHtml, ExportPdf, NoRecentFiles,
-        OpenRecentFile, SelectLanguage, SelectTheme, ShowAbout,
+        AddLanguageConfig, AddThemeConfig, CheckForUpdates, ExportHtml, ExportPdf, NewWindow,
+        NoRecentFiles, OpenFile, OpenPreferences, OpenRecentFile, QuitApplication, SaveDocument,
+        SelectLanguage, SelectTheme, ShowAbout,
     };
     use crate::i18n::I18nManager;
     use crate::theme::ThemeManager;
@@ -710,6 +784,7 @@ mod tests {
             submenu(&menus[0].items[2]).name.to_string(),
             "Open Recent File"
         );
+        assert_eq!(action_name(&menus[0].items[3]), "Preferences");
         assert_eq!(action_name(&menus[1].items[0]), "HTML");
         assert_eq!(action_name(&menus[1].items[1]), "PDF");
         assert_eq!(action_name(&menus[2].items[0]), "简体中文");
@@ -822,6 +897,27 @@ mod tests {
     }
 
     #[test]
+    fn fallback_menu_routes_window_context_actions_without_app_defer() {
+        assert!(super::is_window_context_menu_action(&NewWindow));
+        assert!(super::is_window_context_menu_action(&OpenFile));
+        assert!(super::is_window_context_menu_action(&OpenPreferences));
+        assert!(super::is_window_context_menu_action(&OpenRecentFile {
+            path: "notes.md".into(),
+        }));
+        assert!(super::is_window_context_menu_action(&NoRecentFiles));
+        assert!(super::is_window_context_menu_action(&AddLanguageConfig));
+        assert!(super::is_window_context_menu_action(&AddThemeConfig));
+        assert!(super::is_window_context_menu_action(&SaveDocument));
+        assert!(super::is_window_context_menu_action(&QuitApplication));
+        assert!(!super::is_window_context_menu_action(&SelectTheme {
+            theme_id: "velotype".into(),
+        }));
+        assert!(!super::is_window_context_menu_action(&SelectLanguage {
+            language_id: "en-US".into(),
+        }));
+    }
+
+    #[test]
     fn config_import_items_are_bottom_menu_actions() {
         let theme_manager = ThemeManager::default();
         let i18n_manager = I18nManager::default();
@@ -844,6 +940,8 @@ mod tests {
         }
 
         let theme_items = &menus[3].items;
+        assert_eq!(action_name(&theme_items[0]), "\u{2713} Velotype");
+        assert_eq!(action_name(&theme_items[1]), "Velotype Light");
         assert!(matches!(
             theme_items[theme_items.len() - 2],
             MenuItem::Separator
@@ -863,6 +961,28 @@ mod tests {
                 assert!(action.as_any().is::<AddThemeConfig>());
             }
             _ => panic!("expected add theme config action item"),
+        }
+    }
+
+    #[test]
+    fn theme_menu_marks_selected_builtin_light_theme() {
+        let mut theme_manager = ThemeManager::default();
+        assert!(theme_manager.set_theme_by_id("velotype-light"));
+        let i18n_manager = I18nManager::default();
+        let menus = build_menus(&theme_manager, &i18n_manager, &[]);
+        let theme_items = &menus[3].items;
+
+        assert_eq!(action_name(&theme_items[0]), "Velotype");
+        assert_eq!(action_name(&theme_items[1]), "\u{2713} Velotype Light");
+        match &theme_items[1] {
+            MenuItem::Action { action, .. } => {
+                let action = action
+                    .as_any()
+                    .downcast_ref::<SelectTheme>()
+                    .expect("light theme item should dispatch SelectTheme");
+                assert_eq!(action.theme_id, "velotype-light");
+            }
+            _ => panic!("expected light theme action item"),
         }
     }
 

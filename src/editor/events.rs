@@ -15,6 +15,31 @@ use crate::components::{
 };
 
 impl Editor {
+    fn build_plain_paste_blocks_from_lines(
+        cx: &mut Context<Self>,
+        lines: &[String],
+    ) -> Vec<Entity<super::Block>> {
+        let mut blocks = lines
+            .iter()
+            .filter(|line| !line.trim().is_empty())
+            .map(|line| {
+                Self::new_block(
+                    cx,
+                    BlockRecord::new(BlockKind::Paragraph, InlineTextTree::from_markdown(line)),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        if blocks.is_empty() && !lines.is_empty() {
+            blocks.push(Self::new_block(
+                cx,
+                BlockRecord::new(BlockKind::Paragraph, InlineTextTree::plain(String::new())),
+            ));
+        }
+
+        blocks
+    }
+
     fn block_is_quote_structure_related(&self, block: &Entity<super::Block>, cx: &App) -> bool {
         if self.view_mode != super::ViewMode::Rendered {
             return false;
@@ -691,6 +716,24 @@ impl Editor {
             return;
         }
 
+        if let BlockEvent::RequestReplaceCrossBlockSelection {
+            text,
+            selected_range_relative,
+            mark_inserted_text,
+            undo_kind,
+        } = event
+        {
+            if self.replace_cross_block_selection_with_text(
+                text,
+                selected_range_relative.clone(),
+                *mark_inserted_text,
+                *undo_kind,
+                cx,
+            ) {
+                return;
+            }
+        }
+
         if let Some(binding) = self.table_cell_binding(block.entity_id()) {
             self.on_table_cell_event(binding, event, cx);
             return;
@@ -755,7 +798,7 @@ impl Editor {
                     BlockRecord::new(current_kind.newline_sibling_kind(), trailing.clone()),
                 );
                 if self.view_mode == super::ViewMode::Source {
-                    new_block.update(cx, |block, _cx| block.set_source_raw_mode());
+                    new_block.update(cx, |block, _cx| block.set_source_document_mode());
                 }
                 self.document.insert_blocks_at(
                     location.parent,
@@ -893,6 +936,7 @@ impl Editor {
                 leading,
                 lines,
                 trailing,
+                split_physical_lines,
             } => {
                 if lines.is_empty() {
                     return;
@@ -928,7 +972,15 @@ impl Editor {
                     return;
                 };
 
-                let inserted_roots = Self::build_blocks_from_lines(cx, &tail_lines);
+                // Physical-line paste is for plain rendered text snippets. If
+                // the classifier saw structural Markdown, delegate the tail to
+                // the normal importer so tables, fences, and containers stay
+                // intact instead of becoming paragraphs.
+                let inserted_roots = if *split_physical_lines {
+                    Self::build_plain_paste_blocks_from_lines(cx, &tail_lines)
+                } else {
+                    Self::build_blocks_from_lines(cx, &tail_lines)
+                };
                 self.document.insert_blocks_at(
                     location.parent,
                     location.index + 1,
@@ -984,6 +1036,7 @@ impl Editor {
                 self.finalize_pending_undo_capture(cx);
                 cx.notify();
             }
+            BlockEvent::RequestReplaceCrossBlockSelection { .. } => {}
             BlockEvent::RequestIndent => {
                 if current_visible_index == 0 {
                     return;
@@ -1292,7 +1345,7 @@ mod tests {
     use super::Editor;
     use crate::components::{
         BlockEvent, BlockKind, BlockRecord, CalloutVariant, Delete, DeleteBack, ExitCodeBlock,
-        Newline,
+        InlineTextTree, Newline,
     };
     use gpui::{AppContext, TestAppContext};
 
@@ -1615,6 +1668,131 @@ mod tests {
             assert_eq!(visible[2].entity.read(cx).display_text(), "");
             assert_eq!(visible[2].entity.read(cx).render_depth, 1);
             assert_eq!(editor.document.markdown_text(cx), "- item\n  \n  ");
+        });
+    }
+
+    #[gpui::test]
+    async fn enter_inside_script_paragraph_creates_new_block(cx: &mut TestAppContext) {
+        let cx = cx.add_empty_window();
+        let editor = cx.new(|cx| Editor::from_markdown(cx, "H~2~O".to_string(), None));
+
+        cx.update(|window, cx| {
+            editor.update(cx, |editor, cx| {
+                let block = editor.document.visible_blocks()[0].entity.clone();
+                block.update(cx, |block, block_cx| {
+                    assert!(!block.sync_inline_math_source_edit_for_focus(true));
+                    block.move_to(block.visible_len(), block_cx);
+                    block.on_newline(&Newline, window, block_cx);
+                });
+            });
+        });
+
+        editor.update(cx, |editor, cx| {
+            let visible = editor.document.visible_blocks();
+            assert_eq!(visible.len(), 2);
+            assert_eq!(visible[0].entity.read(cx).display_text(), "H2O");
+            assert_eq!(visible[1].entity.read(cx).kind(), BlockKind::Paragraph);
+            assert_eq!(visible[1].entity.read(cx).display_text(), "");
+            assert_eq!(editor.document.markdown_text(cx), "H~2~O\n\n");
+        });
+    }
+
+    #[gpui::test]
+    async fn plain_multiline_paste_with_scripts_splits_physical_lines(cx: &mut TestAppContext) {
+        let editor = cx.new(|cx| Editor::from_markdown(cx, String::new(), None));
+
+        editor.update(cx, |editor, cx| {
+            let block = editor.document.visible_blocks()[0].entity.clone();
+            editor.on_block_event(
+                block,
+                &BlockEvent::RequestPasteMultiline {
+                    leading: InlineTextTree::plain(String::new()),
+                    lines: vec![
+                        "H~2~O".to_string(),
+                        "CO<sub>2</sub>".to_string(),
+                        "x<sup>n</sup>".to_string(),
+                    ],
+                    trailing: InlineTextTree::plain(String::new()),
+                    split_physical_lines: true,
+                },
+                cx,
+            );
+
+            let visible = editor.document.visible_blocks();
+            assert_eq!(visible.len(), 3);
+            assert_eq!(visible[0].entity.read(cx).display_text(), "H2O");
+            assert_eq!(visible[1].entity.read(cx).display_text(), "CO2");
+            assert_eq!(visible[2].entity.read(cx).display_text(), "xn");
+            assert_eq!(editor.document.markdown_text(cx), "H~2~O\n\nCO~2~\n\nx^n^");
+        });
+    }
+
+    #[gpui::test]
+    async fn plain_multiline_paste_with_blank_script_lines_skips_separator_blanks(
+        cx: &mut TestAppContext,
+    ) {
+        let editor = cx.new(|cx| Editor::from_markdown(cx, String::new(), None));
+
+        editor.update(cx, |editor, cx| {
+            let block = editor.document.visible_blocks()[0].entity.clone();
+            editor.on_block_event(
+                block,
+                &BlockEvent::RequestPasteMultiline {
+                    leading: InlineTextTree::plain(String::new()),
+                    lines: vec![
+                        "H~2~O".to_string(),
+                        String::new(),
+                        "CO<sub>2</sub>".to_string(),
+                        String::new(),
+                        "x<sup>n</sup>".to_string(),
+                        String::new(),
+                    ],
+                    trailing: InlineTextTree::plain(String::new()),
+                    split_physical_lines: true,
+                },
+                cx,
+            );
+
+            let visible = editor.document.visible_blocks();
+            assert_eq!(visible.len(), 3);
+            assert_eq!(visible[0].entity.read(cx).display_text(), "H2O");
+            assert_eq!(visible[1].entity.read(cx).display_text(), "CO2");
+            assert_eq!(visible[2].entity.read(cx).display_text(), "xn");
+        });
+    }
+
+    #[gpui::test]
+    async fn plain_multiline_paste_with_leading_inline_html_splits_physical_lines(
+        cx: &mut TestAppContext,
+    ) {
+        let editor = cx.new(|cx| Editor::from_markdown(cx, String::new(), None));
+
+        editor.update(cx, |editor, cx| {
+            let block = editor.document.visible_blocks()[0].entity.clone();
+            editor.on_block_event(
+                block,
+                &BlockEvent::RequestPasteMultiline {
+                    leading: InlineTextTree::plain(String::new()),
+                    lines: vec![
+                        "<sub>2</sub>".to_string(),
+                        "<sup>n</sup>".to_string(),
+                        "<span style=\"color:red\">x</span>".to_string(),
+                    ],
+                    trailing: InlineTextTree::plain(String::new()),
+                    split_physical_lines: true,
+                },
+                cx,
+            );
+
+            let visible = editor.document.visible_blocks();
+            assert_eq!(visible.len(), 3);
+            assert_eq!(visible[0].entity.read(cx).display_text(), "2");
+            assert_eq!(visible[1].entity.read(cx).display_text(), "n");
+            assert_eq!(visible[2].entity.read(cx).display_text(), "x");
+            assert_eq!(
+                editor.document.markdown_text(cx),
+                "<sub>2</sub>\n\n<sup>n</sup>\n\n<span style=\"color: rgba(255,0,0,1.000);\">x</span>"
+            );
         });
     }
 

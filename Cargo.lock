@@ -4677,28 +4677,41 @@ checksum = "973443cf09a9c8656b574a866ab68dfa19f0867d0340648c7d2f6a71b8a8ea68"
 
 [[package]]
 name = "ratex-font"
-version = "0.1.4"
+version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "811056be8417c5d4fed9ea925f0da209bad38c6cde4c3242db8c10d2a0f16bf1"
+checksum = "afbff82873da9cb006b75910c4978ccf5a0e42b95e92b45f0361751e83134eb3"
 dependencies = [
  "phf 0.11.3",
  "ratex-types",
 ]
 
 [[package]]
-name = "ratex-katex-fonts"
-version = "0.1.4"
+name = "ratex-font-loader"
+version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21c4ea69dd97adce33581f2169dedb1a2d8e986d5f14e301af3460048250fc91"
+checksum = "288ab95dd208f89b48e40dde73ad49f220e09fce1bb1ba7fb94b9b9da1c3638d"
+dependencies = [
+ "ab_glyph",
+ "ratex-font",
+ "ratex-katex-fonts",
+ "ratex-types",
+ "ratex-unicode-font",
+]
+
+[[package]]
+name = "ratex-katex-fonts"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "356dda9769af6a785e9ba8fe2ffa89fd22b047cec5f4e26767a5e29548108ac6"
 dependencies = [
  "rust-embed",
 ]
 
 [[package]]
 name = "ratex-layout"
-version = "0.1.4"
+version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "14c6b915c74165d6a144ad22128092e6a60cf2586175c0f5fd04b6f179cfb238"
+checksum = "13a343bc5b02d64d5569dd71c388386f140f7caef2aa17f1d90af40db8194249"
 dependencies = [
  "ratex-font",
  "ratex-parser",
@@ -4708,9 +4721,9 @@ dependencies = [
 
 [[package]]
 name = "ratex-lexer"
-version = "0.1.4"
+version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d7aedd5d39fb5aea83e010533bc4229465d674b0b09059fa77c6bf27effd74f"
+checksum = "34501a6076195853f6888a4b725b2fa4e6c58708f817ad22d48b70fd6ad47354"
 dependencies = [
  "ratex-types",
  "serde",
@@ -4719,9 +4732,9 @@ dependencies = [
 
 [[package]]
 name = "ratex-parser"
-version = "0.1.4"
+version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6532529dc75e1b1b81ea0f6884afcb64d1623dcf6a2a154aa59529ef54e98db9"
+checksum = "9e9c6108fa2f093a2f71f4212d698796777ed86e8a10dd00d23712944fa6e403"
 dependencies = [
  "fancy-regex",
  "ratex-font",
@@ -4737,13 +4750,14 @@ dependencies = [
 
 [[package]]
 name = "ratex-svg"
-version = "0.1.4"
+version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "309d62be1b5b0cca719999e0ae0c122de6ad2fe1447afc7faeddf8877434b62c"
+checksum = "f532f3ee134b400b8d98d4583254aa412fdac5315ce049bc2e85317751cd47d9"
 dependencies = [
  "ab_glyph",
  "base64",
  "ratex-font",
+ "ratex-font-loader",
  "ratex-katex-fonts",
  "ratex-types",
  "ratex-unicode-font",
@@ -4751,20 +4765,21 @@ dependencies = [
 
 [[package]]
 name = "ratex-types"
-version = "0.1.4"
+version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5cd64ef688da5133869b8573a6d4bd8f3a0ffbfe002cef63d7dec13f00d78024"
+checksum = "8ff31d1010354f0e22ade3ded5bb108d28a7239d0fee8e187a045a89100590c2"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "ratex-unicode-font"
-version = "0.1.4"
+version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0cd1c831dd9c04b28d157a96f215005af0902b6702af0146020586ee89a02cf"
+checksum = "8cb232cd00aefdee9a8e3368927d82eab9d458af2538353f4b44124800bee629"
 dependencies = [
  "fontdb 0.23.0",
+ "system-fonts",
  "ttf-parser 0.25.1",
 ]
 
@@ -6048,6 +6063,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "system-fonts"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f369feb844d5e08bb4e938c3f88ff359261bc94c7553ddb34e174447120b64d6"
+dependencies = [
+ "fontdb 0.23.0",
+ "sys-locale",
+]
+
+[[package]]
 name = "taffy"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6982,7 +7007,7 @@ checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
 
 [[package]]
 name = "velotype"
-version = "0.3.4"
+version = "0.4.8"
 dependencies = [
  "adot-tree-sitter-toml",
  "anyhow",

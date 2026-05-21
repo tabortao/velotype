@@ -4,7 +4,8 @@ use std::ops::Range;
 
 use crate::components::InlineFootnoteReference;
 use crate::components::markdown::inline::{
-    InlineFragment, InlineLink, InlineRenderCache, InlineStyle, InlineTextTree, StyleFlag,
+    InlineFragment, InlineLink, InlineRenderCache, InlineScript, InlineStyle, InlineTextTree,
+    StyleFlag, can_use_markdown_script_delimiters,
 };
 
 use super::CollapsedCaretAffinity;
@@ -28,6 +29,14 @@ pub(super) enum ExpandedInlineKind {
     Strikethrough,
     /// Code span backtick delimiters.
     Code,
+    /// Superscript Markdown delimiters.
+    SuperscriptMarkdown,
+    /// Superscript HTML delimiters.
+    SuperscriptHtml,
+    /// Subscript Markdown delimiters.
+    SubscriptMarkdown,
+    /// Subscript HTML delimiters.
+    SubscriptHtml,
 }
 
 impl ExpandedInlineKind {
@@ -36,6 +45,12 @@ impl ExpandedInlineKind {
             Self::Link => false,
             Self::Strikethrough => style.strikethrough,
             Self::Code => style.code,
+            Self::SuperscriptMarkdown | Self::SuperscriptHtml => {
+                style.script == InlineScript::Superscript
+            }
+            Self::SubscriptMarkdown | Self::SubscriptHtml => {
+                style.script == InlineScript::Subscript
+            }
         }
     }
 
@@ -44,12 +59,18 @@ impl ExpandedInlineKind {
             Self::Link => "[",
             Self::Strikethrough => "~~",
             Self::Code => "`",
+            Self::SuperscriptMarkdown => "^",
+            Self::SuperscriptHtml => "<sup>",
+            Self::SubscriptMarkdown => "~",
+            Self::SubscriptHtml => "<sub>",
         }
     }
 
     fn close_marker(self) -> &'static str {
         match self {
             Self::Link => ")",
+            Self::SuperscriptHtml => "</sup>",
+            Self::SubscriptHtml => "</sub>",
             _ => self.open_marker(),
         }
     }
@@ -59,6 +80,8 @@ impl ExpandedInlineKind {
             Self::Link => None,
             Self::Strikethrough => Some(StyleFlag::Strikethrough),
             Self::Code => Some(StyleFlag::Code),
+            Self::SuperscriptMarkdown | Self::SuperscriptHtml => Some(StyleFlag::Superscript),
+            Self::SubscriptMarkdown | Self::SubscriptHtml => Some(StyleFlag::Subscript),
         }
     }
 
@@ -66,7 +89,11 @@ impl ExpandedInlineKind {
         match self {
             Self::Link => 0,
             Self::Strikethrough => 1,
-            Self::Code => 2,
+            Self::SuperscriptMarkdown
+            | Self::SuperscriptHtml
+            | Self::SubscriptMarkdown
+            | Self::SubscriptHtml => 2,
+            Self::Code => 3,
         }
     }
 }
@@ -146,10 +173,18 @@ pub(super) fn expanded_display_offset_for_clean(
                 }
                 return display + 1 + off;
             }
+            if fragment.style.script != InlineScript::Normal && clean_len > 0 {
+                if off == clean_len {
+                    return display + clean_len + 2;
+                }
+                return display + 1 + off;
+            }
             return display + off;
         }
         clean_cursor = clean_end;
         display += if fragment.style.code && clean_len > 0 {
+            clean_len + 2
+        } else if fragment.style.script != InlineScript::Normal && clean_len > 0 {
             clean_len + 2
         } else {
             clean_len
@@ -179,10 +214,21 @@ pub(super) fn expanded_display_cursor_offset_for_clean(
                 }
                 return display + 1 + off;
             }
+            if fragment.style.script != InlineScript::Normal && clean_len > 0 {
+                if off == 0 {
+                    return display + 1;
+                }
+                if off >= clean_len {
+                    return display + clean_len + 1;
+                }
+                return display + 1 + off;
+            }
             return display + off;
         }
         clean_cursor = clean_end;
         display += if fragment.style.code && clean_len > 0 {
+            clean_len + 2
+        } else if fragment.style.script != InlineScript::Normal && clean_len > 0 {
             clean_len + 2
         } else {
             clean_len
@@ -192,6 +238,9 @@ pub(super) fn expanded_display_cursor_offset_for_clean(
 }
 
 impl ExpandedInlineProjection {
+    // Projection is a temporary editing view over clean inline fragments. It
+    // exposes delimiters only for the fragment touched by the caret, selection,
+    // or IME marked range, while preserving maps back to clean text offsets.
     pub(super) fn build(
         fragments: &[InlineFragment],
         clean_selected: Range<usize>,
@@ -504,6 +553,8 @@ impl ExpandedInlineProjection {
 
             let clean_range = clean_cursor..clean_cursor + fragment_len;
             let expanded_kinds = Self::expanded_kinds_for_fragment(
+                fragments,
+                fragment_index,
                 fragment.style,
                 clean_range.clone(),
                 &clean_selected,
@@ -514,9 +565,10 @@ impl ExpandedInlineProjection {
                 any_expanded = true;
                 let marker = kind.open_marker().to_string();
                 let marker_len = marker.len();
+                let marker_style = marker_style_for_projection(fragment.style, *kind);
                 projected_fragments.push(InlineFragment {
                     text: marker,
-                    style: fragment.style,
+                    style: marker_style,
                     html_style: fragment.html_style,
                     link: None,
                     footnote: None,
@@ -559,9 +611,10 @@ impl ExpandedInlineProjection {
             for kind in expanded_kinds.iter().rev() {
                 let marker = kind.close_marker().to_string();
                 let marker_len = marker.len();
+                let marker_style = marker_style_for_projection(fragment.style, *kind);
                 projected_fragments.push(InlineFragment {
                     text: marker,
-                    style: fragment.style,
+                    style: marker_style,
                     html_style: fragment.html_style,
                     link: None,
                     footnote: None,
@@ -590,6 +643,12 @@ impl ExpandedInlineProjection {
                     ExpandedInlineSegmentKind::OpeningDelimiter(ExpandedInlineKind::Code)
                     | ExpandedInlineSegmentKind::OpeningDelimiter(
                         ExpandedInlineKind::Strikethrough,
+                    )
+                    | ExpandedInlineSegmentKind::OpeningDelimiter(
+                        ExpandedInlineKind::SuperscriptMarkdown,
+                    )
+                    | ExpandedInlineSegmentKind::OpeningDelimiter(
+                        ExpandedInlineKind::SubscriptMarkdown,
                     ) => {
                         clean_to_display_cursor[segment.clean_range.start] =
                             segment.display_range.end;
@@ -597,6 +656,12 @@ impl ExpandedInlineProjection {
                     ExpandedInlineSegmentKind::ClosingDelimiter(ExpandedInlineKind::Code)
                     | ExpandedInlineSegmentKind::ClosingDelimiter(
                         ExpandedInlineKind::Strikethrough,
+                    )
+                    | ExpandedInlineSegmentKind::ClosingDelimiter(
+                        ExpandedInlineKind::SuperscriptMarkdown,
+                    )
+                    | ExpandedInlineSegmentKind::ClosingDelimiter(
+                        ExpandedInlineKind::SubscriptMarkdown,
                     ) => {
                         clean_to_display_cursor[segment.clean_range.start] =
                             segment.display_range.start;
@@ -764,13 +829,23 @@ impl ExpandedInlineProjection {
     }
 
     fn expanded_kinds_for_fragment(
+        fragments: &[InlineFragment],
+        fragment_index: usize,
         style: InlineStyle,
         fragment_range: Range<usize>,
         clean_selected: &Range<usize>,
         clean_marked: Option<&Range<usize>>,
     ) -> Vec<ExpandedInlineKind> {
         let mut kinds = Vec::new();
-        for kind in [ExpandedInlineKind::Strikethrough, ExpandedInlineKind::Code] {
+        let script_kind = Self::script_projection_kind(fragments, fragment_index);
+        for kind in [
+            Some(ExpandedInlineKind::Strikethrough),
+            script_kind,
+            Some(ExpandedInlineKind::Code),
+        ]
+        .into_iter()
+        .flatten()
+        {
             if kind.applies_to(style)
                 && Self::fragment_is_touched(fragment_range.clone(), clean_selected, clean_marked)
             {
@@ -779,6 +854,46 @@ impl ExpandedInlineProjection {
         }
         kinds.sort_by_key(|kind| kind.projection_rank());
         kinds
+    }
+
+    fn script_projection_kind(
+        fragments: &[InlineFragment],
+        fragment_index: usize,
+    ) -> Option<ExpandedInlineKind> {
+        let fragment = fragments.get(fragment_index)?;
+        match fragment.style.script {
+            InlineScript::Normal => None,
+            InlineScript::Superscript => {
+                // Prefer compact Markdown markers only when serialization can
+                // round-trip them safely; standalone script spans use HTML.
+                if can_use_markdown_script_delimiters(
+                    fragment_index
+                        .checked_sub(1)
+                        .and_then(|index| fragments.get(index)),
+                    fragment,
+                ) {
+                    Some(ExpandedInlineKind::SuperscriptMarkdown)
+                } else {
+                    Some(ExpandedInlineKind::SuperscriptHtml)
+                }
+            }
+            InlineScript::Subscript => {
+                // A strikethrough subscript would serialize ambiguously around
+                // `~`, so it also uses the HTML marker projection.
+                if !fragment.style.strikethrough
+                    && can_use_markdown_script_delimiters(
+                        fragment_index
+                            .checked_sub(1)
+                            .and_then(|index| fragments.get(index)),
+                        fragment,
+                    )
+                {
+                    Some(ExpandedInlineKind::SubscriptMarkdown)
+                } else {
+                    Some(ExpandedInlineKind::SubscriptHtml)
+                }
+            }
+        }
     }
 
     fn fragment_is_touched(
@@ -831,4 +946,17 @@ impl ExpandedInlineProjection {
             run.display_range.start <= range.start && range.end <= run.display_range.end
         })
     }
+}
+
+fn marker_style_for_projection(mut style: InlineStyle, kind: ExpandedInlineKind) -> InlineStyle {
+    if matches!(
+        kind,
+        ExpandedInlineKind::SuperscriptMarkdown
+            | ExpandedInlineKind::SuperscriptHtml
+            | ExpandedInlineKind::SubscriptMarkdown
+            | ExpandedInlineKind::SubscriptHtml
+    ) {
+        style.script = InlineScript::Normal;
+    }
+    style
 }

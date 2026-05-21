@@ -141,6 +141,7 @@ pub struct Block {
     /// When true, block-level shortcuts and inline formatting are
     /// suppressed; the block stores raw text for source-mode editing.
     pub(crate) edit_mode: EditMode,
+    show_source_line_numbers: bool,
     pub(crate) table_runtime: Option<TableRuntime>,
     pub(crate) table_cell_position: Option<TableCellPosition>,
     pub(crate) table_cell_alignment: Option<TableColumnAlignment>,
@@ -234,6 +235,7 @@ impl Block {
             inline_math_source_edit_original: None,
             collapsed_caret_affinity: CollapsedCaretAffinity::Default,
             edit_mode,
+            show_source_line_numbers: false,
             table_runtime: None,
             table_cell_position: None,
             table_cell_alignment: None,
@@ -274,6 +276,10 @@ impl Block {
         self.edit_mode == EditMode::SourceRaw
     }
 
+    pub(crate) fn show_source_line_numbers(&self) -> bool {
+        self.show_source_line_numbers
+    }
+
     pub(crate) fn take_quote_reparse_requested(&mut self) -> bool {
         let requested = self.quote_reparse_requested;
         self.quote_reparse_requested = false;
@@ -311,11 +317,18 @@ impl Block {
     pub(crate) fn set_source_raw_mode(&mut self) {
         self.clear_inline_projection();
         self.edit_mode = EditMode::SourceRaw;
+        self.show_source_line_numbers = false;
+    }
+
+    pub(crate) fn set_source_document_mode(&mut self) {
+        self.set_source_raw_mode();
+        self.show_source_line_numbers = true;
     }
 
     pub(crate) fn sync_edit_mode_from_kind(&mut self) {
         if self.table_cell_position.is_some() {
             self.edit_mode = EditMode::RenderedRich;
+            self.show_source_line_numbers = false;
             return;
         }
         if self.edit_mode != EditMode::SourceRaw {
@@ -323,6 +336,7 @@ impl Block {
                 self.clear_inline_projection();
             }
             self.edit_mode = EditMode::for_kind(&self.record.kind);
+            self.show_source_line_numbers = false;
         }
     }
 
@@ -370,8 +384,8 @@ impl Block {
         self.current_cache().inline_math_at(offset)
     }
 
-    pub(crate) fn has_inline_math(&self) -> bool {
-        self.record.title.has_inline_math()
+    pub(crate) fn has_mixed_inline_visuals(&self) -> bool {
+        self.record.title.has_mixed_inline_visuals()
     }
 
     pub(crate) fn inline_math_source_editing(&self) -> bool {
@@ -1074,7 +1088,7 @@ impl Block {
     }
 
     /// Detect Markdown shortcut prefixes in the edited title and convert the
-    /// block's kind accordingly (e.g. `"- "` 鈫?`BulletedListItem`).
+    /// block's kind accordingly (e.g. `"- " -> BulletedListItem`).
     ///
     /// Only triggers when the current kind is [`BlockKind::Paragraph`].
     /// Returns the potentially updated kind, the title with prefix stripped,
@@ -1901,7 +1915,7 @@ impl Block {
     }
 
     /// Cosine-based smooth blink: fully opaque for 0.5s, then oscillates
-    /// with a period of ~1s (33ms 脳 30 ticks 鈮?1s).
+    /// with a period of ~1s (33ms x 30 ticks ~= 1s).
     pub fn cursor_opacity(&self) -> f32 {
         let elapsed = self.cursor_blink_epoch.elapsed().as_secs_f32();
         if elapsed < 0.5 {
@@ -1917,6 +1931,13 @@ impl Block {
         } else {
             self.selected_range.end
         }
+    }
+
+    pub(crate) fn end_pointer_selection_session(&mut self) -> bool {
+        let changed = self.is_selecting || self.code_language_is_selecting;
+        self.is_selecting = false;
+        self.code_language_is_selecting = false;
+        changed
     }
 
     fn selection_anchor_focus(&self) -> (usize, usize) {

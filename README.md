@@ -4,7 +4,7 @@
 
 ![Velotype banner](./assets/icon/velotype-banner.png)
 
-**A Rust + GPUI native Markdown editor with WYSIWYG and source editing modes.** 
+**A Rust + GPUI native Markdown editor with WYSIWYG and source editing modes.**
 
 [Editor Showcase](./assets/showcase/showcase.md)
 
@@ -43,6 +43,8 @@ Velotype targets Windows, Linux, and macOS. The app is naturally suitable for di
 
 Download the Windows, Linux, or macOS build from the [Velotype Releases](https://github.com/manyougz/velotype/releases) page. Release artifacts are designed as portable desktop programs and can be run directly.
 
+> Note: macOS users need to sign the `app` file locally on their machine; otherwise, Velotype will not run properly.
+
 ### 2. Build from source
 
 Prerequisites:
@@ -72,6 +74,8 @@ Syntax support will continue to improve. Planned work includes:
 
 - [x] ~~Mind-map drawing and rendering support~~
 - [x] ~~LaTeX math syntax and rendering support~~
+- [ ] Optimize the parsing and rendering capabilities for extremely large Markdown documents
+- [ ] Workspace Mode and Outline Parsing
 - [ ] Built-in image hosting
 - [ ] More complete IME behavior
 
@@ -88,7 +92,7 @@ Start with the example files:
 
 In the app, use `Theme -> Add Theme Config` or `Language -> Add Language Config` to import a `.json` or `.jsonc` file. JSONC comments are accepted for writing and sharing examples; normalized configuration files saved by the app are strict JSON.
 
-> Thank you for helping translate Velotype or enrich the Velotype theme ecosystem.
+> Thank you for helping translate Velotype or enrich the Velotype theme ecosystem. The project is evolving rapidly, so theme field changes may occur frequently.
 
 ## Architecture
 
@@ -97,6 +101,7 @@ In the app, use `Theme -> Add Theme Config` or `Language -> Add Language Config`
 | `editor` | Window-level editor state: view mode, save/close flow, undo, selection, source mapping, tree mutation, export, and file drop. |
 | `components::block` | Editable block runtime, GPUI input handling, block rendering, block events, image/table/code runtime state. |
 | `components::markdown` | Markdown data models and parse/serialize helpers for inline text, links, images, footnotes, tables, HTML, and code highlighting. |
+| `config` | Velotype behavior and theme configuration interfaces. |
 | `export` | HTML and PDF export pipelines. |
 | `theme` | Visual theme tokens, built-in theme defaults, imported custom themes, and the global theme manager. |
 | `i18n` | Built-in UI strings, imported language packs, system locale matching, and runtime language selection. |
@@ -106,15 +111,14 @@ The editor uses a native block tree as its runtime model. During import, stable 
 
 ## Contributing
 
-This repository is moving quickly. When reporting a parsing or rendering issue, please include:
+This repository is still moving fast. When reporting parsing or rendering issues, please fill out the issue template so the problem can be reproduced and handled efficiently.
 
-- the minimal Markdown input,
-- the expected rendered or serialized result,
-- the actual result,
-- the editing mode where it happens.
-
-For code changes, prefer small patches that extend the existing parser/runtime model instead of replacing the current implementation wholesale.
+For code changes, we recommend developing on the `dev` branch first and keeping patches small. Please extend the existing parser/runtime model instead of replacing the current implementation wholesale.
 
 ## License
 
 Velotype is licensed under the [Apache License 2.0](LICENSE).
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/chart?repos=manyougz/velotype&type=date&legend=top-left)](https://api.star-history.com/chart?repos=manyougz/velotype&type=date&legend=top-left)

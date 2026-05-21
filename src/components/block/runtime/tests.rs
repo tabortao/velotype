@@ -6,11 +6,17 @@ use super::projection::{
 };
 use crate::components::markdown::code_highlight::CodeLanguageKey;
 use crate::components::markdown::inline::{
-    InlineFragment, InlineInsertionAttributes, InlineLinkHit, InlineStyle, InlineTextTree,
+    InlineFragment, InlineInsertionAttributes, InlineLinkHit, InlineScript, InlineStyle,
+    InlineTextTree,
 };
 use crate::components::markdown::link::parse_link_reference_definitions;
 use crate::components::{Block, BlockKind, BlockRecord, Newline, TableCellPosition};
-use gpui::{AppContext, EntityInputHandler, TestAppContext};
+use crate::i18n::I18nManager;
+use crate::theme::ThemeManager;
+use gpui::{
+    AppContext, EntityInputHandler, Modifiers, MouseButton, MouseMoveEvent, MouseUpEvent,
+    TestAppContext, point, px,
+};
 
 fn assert_only_code_range(block: &Block, expected: Range<usize>) {
     let code_ranges = block
@@ -162,6 +168,33 @@ async fn inline_math_focus_uses_markdown_source_then_reparses_on_blur(cx: &mut T
         assert!(!block.uses_raw_text_editing());
         assert_eq!(block.display_text(), "bold $x^2$");
         assert_eq!(block.record.title.serialize_markdown(), "**bold** $x^2$");
+    });
+}
+
+#[gpui::test]
+async fn script_spans_focus_stay_rendered_rich(cx: &mut TestAppContext) {
+    let cx = cx.add_empty_window();
+    let block = cx.new(|cx| {
+        Block::with_record(
+            cx,
+            BlockRecord::new(
+                BlockKind::Paragraph,
+                InlineTextTree::from_markdown("x^2^ and H~2~O"),
+            ),
+        )
+    });
+
+    block.update(cx, |block, _cx| {
+        assert_eq!(block.display_text(), "x2 and H2O");
+        assert_eq!(block.inline_spans()[0].style.script, InlineScript::Normal);
+        assert_eq!(
+            block.inline_spans()[1].style.script,
+            InlineScript::Superscript
+        );
+        assert!(!block.sync_inline_math_source_edit_for_focus(true));
+        assert!(!block.uses_raw_text_editing());
+        assert_eq!(block.display_text(), "x2 and H2O");
+        assert_eq!(block.record.title.serialize_markdown(), "x^2^ and H~2~O");
     });
 }
 
@@ -443,6 +476,164 @@ async fn strikethrough_projection_only_expands_touched_span(cx: &mut TestAppCont
         block.read_with(cx, |block, _cx| block.display_text().to_string()),
         "a ~~gone~~ b"
     );
+}
+
+#[gpui::test]
+async fn script_projection_expands_only_touched_span(cx: &mut TestAppContext) {
+    let block = cx.new(|cx| {
+        Block::with_record(
+            cx,
+            BlockRecord::new(
+                BlockKind::Paragraph,
+                InlineTextTree::from_markdown("x^2^ and H~2~O"),
+            ),
+        )
+    });
+
+    block.update(cx, |block, _cx| {
+        block.selected_range = 0..0;
+        block.sync_inline_projection_for_focus(true);
+    });
+    assert_eq!(
+        block.read_with(cx, |block, _cx| block.display_text().to_string()),
+        "x2 and H2O"
+    );
+
+    block.update(cx, |block, _cx| {
+        block.selected_range = 1..1;
+        block.sync_inline_projection_for_focus(true);
+    });
+    assert_eq!(
+        block.read_with(cx, |block, _cx| block.display_text().to_string()),
+        "x^2^ and H2O"
+    );
+
+    block.update(cx, |block, _cx| {
+        block.clear_inline_projection();
+        block.selected_range = "x2 and H".len().."x2 and H".len();
+        block.sync_inline_projection_for_focus(true);
+    });
+    assert_eq!(
+        block.read_with(cx, |block, _cx| block.display_text().to_string()),
+        "x2 and H~2~O"
+    );
+}
+
+#[gpui::test]
+async fn standalone_script_projection_uses_html_marker_fallback(cx: &mut TestAppContext) {
+    let block = cx.new(|cx| {
+        Block::with_record(
+            cx,
+            BlockRecord::new(
+                BlockKind::Paragraph,
+                InlineTextTree::from_markdown("<sup>2</sup> and <sub>n</sub>"),
+            ),
+        )
+    });
+
+    block.update(cx, |block, _cx| {
+        block.selected_range = 0..0;
+        block.sync_inline_projection_for_focus(true);
+    });
+    assert_eq!(
+        block.read_with(cx, |block, _cx| block.display_text().to_string()),
+        "<sup>2</sup> and n"
+    );
+
+    block.update(cx, |block, _cx| {
+        block.clear_inline_projection();
+        block.selected_range = "2 and ".len().."2 and ".len();
+        block.sync_inline_projection_for_focus(true);
+    });
+    assert_eq!(
+        block.read_with(cx, |block, _cx| block.display_text().to_string()),
+        "2 and <sub>n</sub>"
+    );
+}
+
+#[gpui::test]
+async fn script_projection_marker_edit_unwraps_script_style(cx: &mut TestAppContext) {
+    let block = cx.new(|cx| {
+        Block::with_record(
+            cx,
+            BlockRecord::new(BlockKind::Paragraph, InlineTextTree::from_markdown("x^2^")),
+        )
+    });
+
+    block.update(cx, |block, cx| {
+        block.selected_range = 1..1;
+        block.sync_inline_projection_for_focus(true);
+        assert_eq!(block.display_text(), "x^2^");
+        block.replace_text_in_visible_range(1..2, "", None, false, cx);
+    });
+
+    block.read_with(cx, |block, _cx| {
+        assert_eq!(block.display_text(), "x2");
+        assert_eq!(block.record.title.serialize_markdown(), "x2");
+        assert!(
+            block
+                .inline_spans()
+                .iter()
+                .all(|span| span.style.script == InlineScript::Normal)
+        );
+    });
+}
+
+#[gpui::test]
+async fn subscript_projection_marker_edit_unwraps_script_style(cx: &mut TestAppContext) {
+    let block = cx.new(|cx| {
+        Block::with_record(
+            cx,
+            BlockRecord::new(BlockKind::Paragraph, InlineTextTree::from_markdown("H~2~O")),
+        )
+    });
+
+    block.update(cx, |block, cx| {
+        block.selected_range = 1..1;
+        block.sync_inline_projection_for_focus(true);
+        assert_eq!(block.display_text(), "H~2~O");
+        block.replace_text_in_visible_range(1..2, "", None, false, cx);
+    });
+
+    block.read_with(cx, |block, _cx| {
+        assert_eq!(block.display_text(), "H2O");
+        assert_eq!(block.record.title.serialize_markdown(), "H2O");
+        assert!(
+            block
+                .record
+                .title
+                .render_cache()
+                .spans()
+                .iter()
+                .all(|span| span.style.script == InlineScript::Normal)
+        );
+    });
+}
+
+#[gpui::test]
+async fn script_projection_insertion_inside_span_preserves_script_style(cx: &mut TestAppContext) {
+    let block = cx.new(|cx| {
+        Block::with_record(
+            cx,
+            BlockRecord::new(BlockKind::Paragraph, InlineTextTree::from_markdown("x^2^")),
+        )
+    });
+
+    block.update(cx, |block, cx| {
+        block.selected_range = 1..1;
+        block.sync_inline_projection_for_focus(true);
+        assert_eq!(block.display_text(), "x^2^");
+        block.replace_text_in_visible_range(3..3, "3", None, false, cx);
+    });
+
+    block.read_with(cx, |block, _cx| {
+        assert_eq!(block.display_text(), "x^23^");
+        assert_eq!(block.record.title.serialize_markdown(), "x^23^");
+        assert_eq!(
+            block.record.title.render_cache().spans()[1].style.script,
+            InlineScript::Superscript
+        );
+    });
 }
 
 #[gpui::test]
@@ -1228,6 +1419,40 @@ async fn ime_replace_text_replaces_right_to_left_selection_in_source_raw_mode(
 }
 
 #[gpui::test]
+async fn source_document_mode_enables_line_numbers(cx: &mut TestAppContext) {
+    let block = cx.new(|cx| {
+        let mut block = Block::with_record(
+            cx,
+            BlockRecord::new(BlockKind::Paragraph, InlineTextTree::plain("a\nb")),
+        );
+        block.set_source_document_mode();
+        block
+    });
+
+    block.read_with(cx, |block, _cx| {
+        assert!(block.is_source_raw_mode());
+        assert!(block.show_source_line_numbers());
+    });
+}
+
+#[gpui::test]
+async fn source_raw_mode_does_not_enable_line_numbers(cx: &mut TestAppContext) {
+    let block = cx.new(|cx| {
+        let mut block = Block::with_record(
+            cx,
+            BlockRecord::new(BlockKind::Paragraph, InlineTextTree::plain("raw")),
+        );
+        block.set_source_raw_mode();
+        block
+    });
+
+    block.read_with(cx, |block, _cx| {
+        assert!(block.is_source_raw_mode());
+        assert!(!block.show_source_line_numbers());
+    });
+}
+
+#[gpui::test]
 async fn ime_replace_and_mark_text_replaces_right_to_left_selection_in_table_cell(
     cx: &mut TestAppContext,
 ) {
@@ -1812,6 +2037,185 @@ async fn code_language_input_clears_language_when_empty(cx: &mut TestAppContext)
             BlockKind::CodeBlock { language: None }
         ));
         assert!(block.code_highlight_result().is_none());
+    });
+}
+
+#[gpui::test]
+async fn ending_pointer_selection_session_preserves_text_state(cx: &mut TestAppContext) {
+    let block = cx.new(|cx| {
+        Block::with_record(
+            cx,
+            BlockRecord::new(
+                BlockKind::CodeBlock {
+                    language: Some("rust".into()),
+                },
+                InlineTextTree::plain("fn main() {}"),
+            ),
+        )
+    });
+
+    block.update(cx, |block, _cx| {
+        block.is_selecting = true;
+        block.code_language_is_selecting = true;
+        block.selected_range = 3..7;
+        block.marked_range = Some(4..6);
+        block.code_language_selected_range = 1..3;
+        block.code_language_marked_range = Some(1..2);
+
+        assert!(block.end_pointer_selection_session());
+        assert!(!block.is_selecting);
+        assert!(!block.code_language_is_selecting);
+        assert_eq!(block.selected_range, 3..7);
+        assert_eq!(block.marked_range, Some(4..6));
+        assert_eq!(block.code_language_selected_range, 1..3);
+        assert_eq!(block.code_language_marked_range, Some(1..2));
+
+        assert!(!block.end_pointer_selection_session());
+    });
+}
+
+#[gpui::test]
+async fn non_dragging_mouse_move_ends_stale_text_selection(cx: &mut TestAppContext) {
+    cx.update(|cx| {
+        I18nManager::init(cx);
+        ThemeManager::init(cx);
+    });
+    let (block, cx) = cx.add_window_view(|_window, cx| {
+        Block::with_record(
+            cx,
+            BlockRecord::new(BlockKind::Paragraph, InlineTextTree::plain("hello world")),
+        )
+    });
+
+    let event = MouseMoveEvent {
+        position: point(px(8.0), px(8.0)),
+        pressed_button: None,
+        modifiers: Modifiers::default(),
+    };
+    cx.update(|window, cx| {
+        block.update(cx, |block, cx| {
+            block.is_selecting = true;
+            block.selected_range = 3..7;
+            block.marked_range = Some(4..6);
+
+            block.on_mouse_move(&event, window, cx);
+
+            assert!(!block.is_selecting);
+            assert_eq!(block.selected_range, 3..7);
+            assert_eq!(block.marked_range, Some(4..6));
+        });
+    });
+}
+
+#[gpui::test]
+async fn dragging_mouse_move_keeps_text_selection_session_active(cx: &mut TestAppContext) {
+    cx.update(|cx| {
+        I18nManager::init(cx);
+        ThemeManager::init(cx);
+    });
+    let (block, cx) = cx.add_window_view(|_window, cx| {
+        Block::with_record(
+            cx,
+            BlockRecord::new(BlockKind::Paragraph, InlineTextTree::plain("hello world")),
+        )
+    });
+
+    let event = MouseMoveEvent {
+        position: point(px(8.0), px(8.0)),
+        pressed_button: Some(MouseButton::Left),
+        modifiers: Modifiers::default(),
+    };
+    cx.update(|window, cx| {
+        block.update(cx, |block, cx| {
+            block.is_selecting = true;
+            block.on_mouse_move(&event, window, cx);
+            assert!(block.is_selecting);
+        });
+    });
+}
+
+#[gpui::test]
+async fn non_dragging_mouse_move_ends_stale_code_language_selection(cx: &mut TestAppContext) {
+    cx.update(|cx| {
+        I18nManager::init(cx);
+        ThemeManager::init(cx);
+    });
+    let (block, cx) = cx.add_window_view(|_window, cx| {
+        Block::with_record(
+            cx,
+            BlockRecord::new(
+                BlockKind::CodeBlock {
+                    language: Some("rust".into()),
+                },
+                InlineTextTree::plain("fn main() {}"),
+            ),
+        )
+    });
+
+    let event = MouseMoveEvent {
+        position: point(px(8.0), px(8.0)),
+        pressed_button: None,
+        modifiers: Modifiers::default(),
+    };
+    cx.update(|window, cx| {
+        block.update(cx, |block, cx| {
+            block.code_language_is_selecting = true;
+            block.code_language_selected_range = 1..3;
+            block.code_language_marked_range = Some(1..2);
+
+            block.on_code_language_mouse_move(&event, window, cx);
+
+            assert!(!block.code_language_is_selecting);
+            assert_eq!(block.code_language_selected_range, 1..3);
+            assert_eq!(block.code_language_marked_range, Some(1..2));
+        });
+    });
+}
+
+#[gpui::test]
+async fn code_language_mouse_up_out_ends_selection_without_clearing_text_state(
+    cx: &mut TestAppContext,
+) {
+    cx.update(|cx| {
+        I18nManager::init(cx);
+        ThemeManager::init(cx);
+    });
+    let (block, cx) = cx.add_window_view(|_window, cx| {
+        Block::with_record(
+            cx,
+            BlockRecord::new(
+                BlockKind::CodeBlock {
+                    language: Some("rust".into()),
+                },
+                InlineTextTree::plain("fn main() {}"),
+            ),
+        )
+    });
+
+    let event = MouseUpEvent {
+        position: point(px(200.0), px(200.0)),
+        button: MouseButton::Left,
+        modifiers: Modifiers::default(),
+        click_count: 1,
+    };
+    cx.update(|window, cx| {
+        block.update(cx, |block, cx| {
+            block.is_selecting = true;
+            block.code_language_is_selecting = true;
+            block.selected_range = 3..7;
+            block.marked_range = Some(4..6);
+            block.code_language_selected_range = 1..3;
+            block.code_language_marked_range = Some(1..2);
+
+            block.on_code_language_mouse_up_out(&event, window, cx);
+
+            assert!(block.is_selecting);
+            assert!(!block.code_language_is_selecting);
+            assert_eq!(block.selected_range, 3..7);
+            assert_eq!(block.marked_range, Some(4..6));
+            assert_eq!(block.code_language_selected_range, 1..3);
+            assert_eq!(block.code_language_marked_range, Some(1..2));
+        });
     });
 }
 

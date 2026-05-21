@@ -146,6 +146,12 @@ fn rewrite_inline_math_line(line: &str, theme: &Theme) -> String {
             continue;
         }
 
+        if let Some((end, body, tag)) = locate_inline_script_source(line, index) {
+            output.push_str(&format!("<{tag}>{}</{tag}>", escape_html(&body)));
+            index = end;
+            continue;
+        }
+
         let ch = line[index..].chars().next().unwrap();
         output.push(ch);
         index += ch.len_utf8();
@@ -187,6 +193,60 @@ fn locate_inline_dollar_math_source(line: &str, index: usize) -> Option<(usize, 
         cursor += line[cursor..].chars().next()?.len_utf8();
     }
     None
+}
+
+fn locate_inline_script_source(line: &str, index: usize) -> Option<(usize, String, &'static str)> {
+    if is_escaped_ascii(line, index) {
+        return None;
+    }
+
+    if line[index..].starts_with('^') {
+        locate_script_close(line, index, '^').map(|(end, body)| (end, body, "sup"))
+    } else if is_single_tilde_marker(line, index) {
+        locate_script_close(line, index, '~').map(|(end, body)| (end, body, "sub"))
+    } else {
+        None
+    }
+}
+
+fn locate_script_close(line: &str, index: usize, marker: char) -> Option<(usize, String)> {
+    let prev = previous_char(line, index)?;
+    if !prev.is_ascii_alphanumeric() {
+        return None;
+    }
+
+    let body_start = index + marker.len_utf8();
+    let first = line[body_start..].chars().next()?;
+    if !first.is_ascii_alphanumeric() {
+        return None;
+    }
+
+    let mut cursor = body_start;
+    while cursor < line.len() {
+        if line[cursor..].starts_with(marker)
+            && !is_escaped_ascii(line, cursor)
+            && (marker != '~' || is_single_tilde_marker(line, cursor))
+        {
+            let body = &line[body_start..cursor];
+            return body
+                .chars()
+                .all(|ch| ch.is_ascii_alphanumeric())
+                .then(|| (cursor + marker.len_utf8(), body.to_string()));
+        }
+        cursor += line[cursor..].chars().next()?.len_utf8();
+    }
+
+    None
+}
+
+fn previous_char(line: &str, index: usize) -> Option<char> {
+    line.get(..index)?.chars().next_back()
+}
+
+fn is_single_tilde_marker(line: &str, index: usize) -> bool {
+    line[index..].starts_with('~')
+        && previous_char(line, index).is_none_or(|ch| ch != '~')
+        && line[index + 1..].chars().next().is_none_or(|ch| ch != '~')
 }
 
 fn locate_inline_paren_math_source(line: &str, index: usize) -> Option<(usize, String)> {
@@ -885,6 +945,30 @@ mod tests {
         assert!(!html.contains("class=\"vlt-inline-math\""));
         assert!(html.contains("$x$"));
         assert!(html.contains("$y$"));
+    }
+
+    #[test]
+    fn exports_superscript_and_subscript_as_html_tags() {
+        let html = render_html("x^2^ and H~2~O", &Theme::default_theme(), "Doc");
+
+        assert!(html.contains("x<sup>2</sup>"));
+        assert!(html.contains("H<sub>2</sub>O"));
+    }
+
+    #[test]
+    fn export_script_rewrite_ignores_code_escaped_and_strikethrough() {
+        let html = render_html(
+            "`x^2^ H~2~O` \\^2^ \\~2~ ~~old~~",
+            &Theme::default_theme(),
+            "Doc",
+        );
+
+        assert!(!html.contains("<sup>2</sup>"));
+        assert!(!html.contains("<sub>2</sub>"));
+        assert!(html.contains("<code>x^2^ H~2~O</code>"));
+        assert!(html.contains("^2^"));
+        assert!(html.contains("~2~"));
+        assert!(html.contains("<del>old</del>"));
     }
 
     #[test]
